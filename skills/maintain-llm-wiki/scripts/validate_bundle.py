@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the repository's conservative OKF profile without dependencies."""
+"""Validate a conservative OKF bundle outside the agent-kit repository."""
 
 from __future__ import annotations
 
@@ -94,4 +94,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

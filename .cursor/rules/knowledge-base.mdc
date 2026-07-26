@@ -5,5 +5,6 @@ alwaysApply: true
 
 Follow `/AGENTS.md` and `/rules/knowledge-base.md`.
 
-For durable knowledge work, load `/skills/maintain-llm-wiki/SKILL.md`. Use the configured Knowledge Gateway for live reads and writes. Treat GitHub only as backup and agent-kit distribution.
-
+For durable knowledge work, load `/skills/maintain-llm-wiki/SKILL.md`. Use the
+configured Knowledge Gateway for live reads and writes. This repository
+distributes the agent kit only; keep knowledge content and backups elsewhere.

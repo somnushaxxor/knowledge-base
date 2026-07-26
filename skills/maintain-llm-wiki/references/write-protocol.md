@@ -22,7 +22,10 @@ Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_val
 
 ## Receipt semantics
 
-A receipt proves the live write is durable and includes a revision and local Git commit. `backup: pending` means the live write succeeded but the off-site GitHub copy has not caught up. Do not describe a pending backup as complete.
+A receipt proves the live write is durable and includes a revision and local
+Git commit. `backup: pending` means the live write succeeded but the separate
+off-site Git backup has not caught up. Do not describe a pending backup as
+complete.
 
 ## Conflict
 
@@ -35,4 +38,3 @@ A revision conflict means another accepted write happened after the read. Fetch 
 - Gateway unavailable: do not write directly to GitHub or a local clone.
 - Backup delayed: the live authority remains valid; report and monitor the lag.
 - Repeated idempotency key: inspect the returned prior result before retrying.
-

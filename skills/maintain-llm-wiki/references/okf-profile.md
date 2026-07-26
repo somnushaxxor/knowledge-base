@@ -4,7 +4,9 @@ The canonical bundle follows Open Knowledge Format v0.2 with additional local co
 
 ## Bundle
 
-- Store the live bundle under `knowledge/`.
+- Store the live bundle at the gateway's configured runtime path, outside the
+  agent-kit repository.
+- Store versioned backups in a separate private backup destination.
 - Reserve root `index.md` for navigation and `log.md` for notable changes.
 - Use UTF-8 Markdown.
 - Use bundle-absolute internal Markdown links such as `/concepts/consistency.md`.
@@ -64,4 +66,3 @@ Each source requires `resource`. Preserve existing source fields and source iden
 - Update `generated` only when generation provenance truly changes; use verification or history for later review.
 - Use `stale_after` only when the material has a meaningful review horizon.
 - Archive obsolete material instead of destroying recoverable history.
-

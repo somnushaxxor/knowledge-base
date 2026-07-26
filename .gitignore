@@ -7,4 +7,4 @@ __pycache__/
 !.env.example
 secrets/
 runtime/
-
+/knowledge/

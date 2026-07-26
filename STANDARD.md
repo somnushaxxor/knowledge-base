@@ -4,13 +4,21 @@ Status: **Draft v0.1**
 
 ## 1. Purpose
 
-This standard defines one personal knowledge base that:
+This standard defines a knowledge base that:
 
-- is current across computers, phones, and cloud agents;
-- can be read and changed concurrently by multiple agents;
+- can serve an individual, a project team, or another explicitly defined group;
+- is current across participants, computers, phones, and cloud agents;
+- can be read and changed concurrently by multiple people and agents;
 - remains portable, human-readable, and usable without a vendor;
 - distributes the same maintenance behavior to Codex, Claude Code, Cursor, NanoClaw, and future agents;
-- has a versioned GitHub backup and an independent disaster-recovery backup.
+- has a versioned backup separate from this agent-kit repository and an independent disaster-recovery backup.
+
+Personal and project knowledge bases are deployment profiles of the same
+concept, not separate architectures. Every deployed knowledge base has an
+explicit scope, membership, and authorization policy. A project deployment
+acts as shared project memory: authorized participants and their agents work
+with the same canonical knowledge, while changes remain attributable to the
+human, agent, or process that made them.
 
 ## 2. Chosen stack
 
@@ -22,7 +30,7 @@ This standard defines one personal knowledge base that:
 | Agent protocol | MCP over Streamable HTTP | Give different agents one standard remote tool surface |
 | Lexical search | SQLite FTS5 or QMD-compatible local index | Fast full-text retrieval over the live OKF bundle |
 | Semantic search | Optional derived vector index | Improve recall; always rebuildable from OKF |
-| Backup | Local Git history pushed to this private GitHub repository | Off-site, reviewable, versioned recovery copy |
+| Backup | Local Git history pushed to a separate private Git repository | Off-site, reviewable, versioned recovery copy without mixing knowledge content into the agent kit |
 | Disaster recovery | Encrypted provider snapshot/object-store archive | Recover when both the live disk and Git remote are unavailable |
 | Agent behavior | Canonical skill, rules, and hooks in this repository | Make all agents follow the same workflow |
 
@@ -30,16 +38,23 @@ The gateway is custom because no sufficiently established project currently comb
 
 ## 3. Authority and consistency
 
-There is exactly one live authority: the persistent OKF bundle mounted by the Knowledge Gateway.
+There is exactly one live authority for each knowledge-base scope: the
+persistent OKF bundle mounted by its Knowledge Gateway. A deployment may host
+multiple scopes only when it provides equivalent workspace isolation,
+authorization, and backup boundaries.
 
 Agents must not:
 
 - use GitHub as the source for live reads;
 - edit the live files through SSH, Drive sync, or a second server;
 - maintain a private canonical memory that is invisible to other agents;
+- read or write knowledge outside the scope authorized for their participant or project;
 - claim that a fact was saved when the gateway did not return a write receipt.
 
-All successful gateway writes are visible to subsequent reads immediately. A phone agent and a desktop agent therefore see the same accepted revision even if GitHub backup is temporarily delayed.
+All successful gateway writes are visible to subsequent reads immediately. A
+project participant, a phone agent, and a desktop agent therefore see the same
+accepted revision within their shared scope even if the separate Git backup is
+temporarily delayed.
 
 ## 4. Gateway contract
 
@@ -58,13 +73,21 @@ The gateway exposes a small MCP tool surface:
 
 Every mutation requires:
 
-- a per-agent identity derived from its bearer token;
+- an authenticated actor identity derived from its credential;
+- the knowledge-base scope and an authorization check for that scope;
 - an idempotency key;
 - `expected_revision` for an update, or an explicit create-only condition;
 - a complete OKF document;
 - an audit reason or source reference.
 
-The gateway performs validation, obtains a per-document lock, checks the expected revision, writes atomically, updates the search projection, and creates a local Git commit. It then returns:
+The actor identifies the human, agent, or process making the change. When an
+agent acts on behalf of a person or project role, the audit record should
+preserve both the agent identity and the delegating principal where the
+authentication system can provide them.
+
+The gateway authorizes the scoped operation, performs validation, obtains a
+per-document lock, checks the expected revision, writes atomically, updates the
+search projection, and creates a local Git commit. It then returns:
 
 ```json
 {
@@ -80,7 +103,8 @@ On a conflict, the agent must read the new revision, merge semantically, and ret
 
 ## 5. Knowledge model
 
-The live `knowledge/` directory is one OKF v0.2 bundle.
+The gateway-managed bundle directory is one OKF v0.2 bundle. Its configured
+runtime path is external to this agent-kit repository.
 
 - Every knowledge document is Markdown with YAML frontmatter.
 - `type` is required by OKF; this profile also requires `title`, `description`, `status`, `tags`, and `generated`.
@@ -106,9 +130,20 @@ The wiki is curated, not merely accumulated:
 
 No permanently running “wiki-building agent” is required. Any authorized agent can maintain the wiki by loading the same skill and calling the gateway. Scheduled maintenance agents are optional and use the same contract.
 
+In a project knowledge base, maintenance is a collaborative operation:
+
+- all authorized participants and agents search and update the same canonical
+  concepts instead of keeping isolated private copies;
+- permissions may distinguish readers, contributors, and administrators;
+- provenance and revision history make contributions attributable and
+  reviewable;
+- concurrent edits follow the same optimistic-concurrency protocol regardless
+  of whether they originated from different people, agents, or devices.
+
 ## 7. Backup and recovery
 
-GitHub is a backup destination, not the live bus.
+The separate private Git repository is a backup destination, not the live bus.
+This agent-kit repository must never receive live or backup knowledge payloads.
 
 ### Git backup
 
@@ -118,7 +153,8 @@ GitHub is a backup destination, not the live bus.
 - `kb_backup_status` exposes the last local commit, last pushed commit, lag, and failure reason.
 - Backup lag above the objective triggers an alert but does not split the live authority.
 - Force-pushes and destructive history rewrites are prohibited.
-- The GitHub repository must be private and protected with strong account security.
+- The backup repository must be private, separate from this agent-kit
+  repository, and protected with strong account security.
 
 ### Independent backup
 
@@ -127,7 +163,8 @@ GitHub is a backup destination, not the live bus.
 - Keep encryption keys outside the live host.
 - Perform and record a restore drill at least quarterly.
 
-A backup is considered valid only after an automated restore can reconstruct the OKF bundle and pass repository validation.
+A backup is considered valid only after an automated restore can reconstruct
+the OKF bundle and pass bundle validation.
 
 ## 8. Agent distribution
 
@@ -139,6 +176,9 @@ This repository is the canonical distribution source:
 - `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/` are thin vendor adapters.
 
 Adapters must point to the canonical assets and must not grow divergent copies of the policy. The installer links the same skill directory into supported user-level agent locations.
+
+The repository must not contain a `knowledge/` directory, live OKF documents,
+or a copy of the backup payload.
 
 Runtime configuration is external to Git:
 
@@ -153,22 +193,33 @@ Commit only examples or variable names, never live secrets.
 ## 9. Security baseline
 
 - Use TLS for every remote connection.
-- Issue a different revocable token per agent or device.
-- Separate read-only, writer, and administrator roles.
-- Limit writer paths and operations where practical.
+- Issue a different revocable credential per person, agent, service, or device.
+- Define membership separately for every personal, project, or organizational
+  knowledge-base scope.
+- Separate reader, contributor, and administrator roles.
+- Enforce scope boundaries on every read, search, history, and mutation
+  operation, not only on writes.
+- Limit contributor paths and operations where practical.
 - Redact secrets before persistence and validate documents server-side.
 - Record mutations with actor, timestamp, previous revision, and reason.
 - Back up encrypted data and test token revocation.
+- Prevent one project scope from appearing in another project's search results,
+  semantic index, history, logs, or backups.
 
 ## 10. Acceptance criteria
 
 The production system is acceptable when:
 
-1. two agents can concurrently edit the same page without silent loss;
-2. a successful desktop write is visible from a phone agent on the next read;
-3. an unavailable GitHub does not create a second authority;
-4. backup lag and the last recovery point are observable;
-5. a clean machine can restore the bundle from GitHub and pass validation;
-6. a quarterly snapshot restore succeeds;
-7. Codex, Claude Code, and Cursor load the same maintenance skill.
-
+1. two project participants or agents can concurrently edit the same page
+   without silent loss;
+2. a successful write by one authorized participant is visible to another
+   authorized participant or agent on the next read;
+3. an unauthorized participant cannot discover or access another personal or
+   project scope;
+4. revision history attributes every accepted mutation to its actor and, when
+   applicable, its delegating principal;
+5. an unavailable GitHub does not create a second authority;
+6. backup lag and the last recovery point are observable;
+7. a clean machine can restore the bundle from the separate Git backup and pass validation;
+8. a quarterly snapshot restore succeeds;
+9. Codex, Claude Code, and Cursor load the same maintenance skill.
