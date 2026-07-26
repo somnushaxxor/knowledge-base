@@ -4,7 +4,8 @@
 2. Keep live knowledge and its backups outside the agent-kit repository; use a separate private backup destination.
 3. Search and read before creating or updating a page.
 4. Store durable knowledge in OKF Markdown; do not store the only copy in a vector database, chat history, or private agent memory.
-5. Use the configured taxonomy. Do not invent a new document type during ordinary capture.
+5. Use the gateway-configured deployment taxonomy. Do not infer or invent a
+   new document type during ordinary capture.
 6. Preserve unknown OKF metadata and source attribution.
 7. Use optimistic concurrency. On conflict, re-read, merge semantically, and retry.
 8. Never use last-write-wins for concurrent edits.

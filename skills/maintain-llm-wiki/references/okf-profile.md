@@ -9,16 +9,17 @@ The canonical bundle follows Open Knowledge Format v0.2 with additional local co
 - Store versioned backups in a separate private backup destination.
 - Reserve root `index.md` for navigation and `log.md` for notable changes.
 - Use UTF-8 Markdown.
-- Use bundle-absolute internal Markdown links such as `/concepts/consistency.md`.
+- Use bundle-absolute internal Markdown links such as
+  `/<configured-folder>/<document-slug>.md`.
 - Keep non-knowledge configuration outside the bundle.
 
 ## Required document metadata
 
-Every concept document has YAML frontmatter with:
+Every knowledge document has YAML frontmatter with:
 
 ```yaml
 ---
-type: Concept
+type: ConfiguredType
 title: Readable title
 description: One-sentence scope.
 tags: [example]
@@ -29,7 +30,9 @@ status: draft
 ---
 ```
 
-Use only document types declared in `config/taxonomy.yaml`. Use `draft`, `stable`, or `deprecated` for `status`.
+Use only document types declared in the taxonomy configured for the active
+gateway deployment. Do not infer a type from repository documentation. Use
+`draft`, `stable`, or `deprecated` for `status`.
 
 Use actor values that identify the producer, for example:
 
@@ -57,7 +60,7 @@ Each source requires `resource`. Preserve existing source fields and source iden
 - Use the sections expected by the selected taxonomy type.
 - Write a coherent durable page, not a chat transcript.
 - Link relevant canonical pages.
-- Prefer one stable concept per page.
+- Prefer one stable subject per page.
 - Preserve meaningful contrary evidence and uncertainty.
 
 ## Editing

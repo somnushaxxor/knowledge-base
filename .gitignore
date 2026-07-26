@@ -2,9 +2,11 @@
 *.swp
 *.tmp
 __pycache__/
+.pytest_cache/
+.venv/
 .env
 .env.*
 !.env.example
 secrets/
-runtime/
+/runtime/
 /knowledge/

@@ -51,10 +51,13 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
 
 1. Decide whether the information is durable, reusable, and safe to store. Do not persist transient chat or secrets.
 2. Search for an existing canonical page before creating one.
-3. Select a type from the configured taxonomy. Do not invent a new type.
+3. Select a type from the gateway-configured deployment taxonomy. Do not infer
+   or invent a new type.
 4. Hydrate the target page and record its revision when updating.
 5. Merge new information into a coherent page rather than appending a session transcript.
-6. Include provenance and sources. Use the templates in `assets/` when helpful.
+6. Include provenance and sources. When using
+   `assets/document-template.md`, replace its type and section placeholders
+   with values required by the deployment taxonomy.
 7. Call `kb_validate`.
 8. Call `kb_upsert` with an idempotency key and `expected_revision`, or an explicit create-only condition.
 9. Keep the returned path, revision, commit, and backup state in the working context.

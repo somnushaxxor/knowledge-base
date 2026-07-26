@@ -1,0 +1,11 @@
+---
+description: Connected cloud-first knowledge-base policy
+alwaysApply: true
+---
+
+Follow `/AGENTS.md` and `/.agents/rules/knowledge-base.md`.
+
+For durable knowledge work, load
+`/.agents/skills/maintain-llm-wiki/SKILL.md`. Use the configured Knowledge
+Gateway for live reads and writes. Keep live knowledge, backups, credentials,
+and private runtime configuration outside this project.

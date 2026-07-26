@@ -7,7 +7,8 @@ Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_val
 ## Create
 
 1. Search for duplicates.
-2. Choose a taxonomy path.
+2. Choose a type and path permitted by the gateway-configured deployment
+   taxonomy.
 3. Validate the complete document.
 4. Send `kb_upsert` with a unique idempotency key and create-only precondition.
 5. Retain the returned receipt.

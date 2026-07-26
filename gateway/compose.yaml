@@ -1,0 +1,28 @@
+services:
+  knowledge-gateway:
+    build:
+      context: ..
+      dockerfile: gateway/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - knowledge-gateway-data:/data
+      - "${KB_TAXONOMY_FILE:?Set KB_TAXONOMY_FILE to a deployment taxonomy}:/app/config/taxonomy.yaml:ro"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('127.0.0.1',8000),2); s.close()"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  knowledge-gateway-data:

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "knowledge-fastmcp-gateway"
+version = "0.1.0"
+description = "A FastMCP gateway for a canonical OKF knowledge bundle"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "fastmcp>=3.4,<4",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.25,<2",
+]
+
+[project.scripts]
+knowledge-gateway = "knowledge_gateway.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowledge_gateway"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+

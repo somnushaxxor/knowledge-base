@@ -1,0 +1,14 @@
+# Test-only fixture. This is not a deployment taxonomy or a user-facing example.
+version: 1
+policy:
+  unknown_types: reject
+  type_changes_require_decision: true
+  internal_links: bundle_absolute
+types:
+  - type: Note
+    folder: notes
+    purpose: Exercise gateway validation in automated tests.
+    sections:
+      - Summary
+      - Details
+      - Relationships

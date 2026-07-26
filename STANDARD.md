@@ -26,7 +26,7 @@ human, agent, or process that made them.
 |---|---|---|
 | Knowledge method | [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) | Maintain a small, linked, evolving wiki rather than an append-only transcript |
 | Canonical format | [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) | Markdown, YAML frontmatter, sources, provenance, links, and reserved indexes |
-| Live authority | Custom Knowledge Gateway on one cloud host | Authenticate agents, search, read, serialize writes, validate, and return durable revisions |
+| Live authority | Custom Knowledge Gateway on one cloud host, implemented with FastMCP | Authenticate agents, search, read, serialize writes, validate, and return durable revisions |
 | Agent protocol | MCP over Streamable HTTP | Give different agents one standard remote tool surface |
 | Lexical search | SQLite FTS5 or QMD-compatible local index | Fast full-text retrieval over the live OKF bundle |
 | Semantic search | Optional derived vector index | Improve recall; always rebuildable from OKF |
@@ -35,6 +35,24 @@ human, agent, or process that made them.
 | Agent behavior | Canonical skill, rules, and hooks in this repository | Make all agents follow the same workflow |
 
 The gateway is custom because no sufficiently established project currently combines strict OKF storage, remote MCP, authenticated multi-writer concurrency, and explicit backup semantics. It should be small and boring: use mature libraries, keep OKF as the source of truth, and avoid inventing a database-specific knowledge format.
+
+The buildable reference implementation lives in `gateway/`. FastMCP provides
+the MCP protocol and Streamable HTTP transport; the custom code owns the OKF
+profile, scope authorization, optimistic-concurrency protocol, idempotency,
+audit receipts, Git history, and backup semantics.
+
+### Implementation decision
+
+The reference gateway is implemented in Python on FastMCP 3.x so the project
+can spend its complexity budget on knowledge storage and consistency instead
+of reimplementing MCP. FastMCP owns protocol negotiation, tool schemas,
+Streamable HTTP, test clients, and JWT verification integration. The domain
+service remains independent of the transport framework.
+
+The dependency is constrained to `fastmcp>=3.4,<4`. A major-version upgrade
+requires an explicit dependency review and passing gateway contract tests.
+FastMCP is an upstream framework, not this product's storage format or unique
+technology boundary.
 
 ## 3. Authority and consistency
 
@@ -111,10 +129,45 @@ runtime path is external to this agent-kit repository.
 - Claims copied or synthesized from external material include `sources`.
 - Internal links are bundle-relative and begin with `/`.
 - `index.md` provides navigation. `log.md` records significant changes newest first.
-- Document types and their expected sections are declared in [config/taxonomy.yaml](config/taxonomy.yaml).
+- Document types and their expected sections are declared by a
+  deployment-owned taxonomy explicitly selected through
+  `KB_TAXONOMY_PATH`.
 - Unknown valid OKF metadata must be preserved during edits.
 
-The initial taxonomy is deliberately small. Changing it requires a decision document and a migration plan; adding random new types during ordinary capture is not allowed.
+The standard defines the taxonomy configuration contract, not a universal list
+of document types. The kit contains no default or example taxonomy.
+Installation requires an explicit deployment model supplied by the operator.
+The installed copy belongs to the deployment rather than to the agent kit. The
+gateway must never select a taxonomy implicitly.
+
+A taxonomy is a YAML document with this shape:
+
+```yaml
+version: 1
+policy:
+  unknown_types: reject
+  type_changes_require_decision: true
+  internal_links: bundle_absolute
+types:
+  - type: TypeName
+    folder: folder-name
+    purpose: Human-readable guidance for agents and maintainers.
+    sections:
+      - Required section
+```
+
+For every entry, `type` and `folder` are required. `purpose` is guidance for
+agents and maintainers. `sections` is an optional list of required level-two
+headings. A deployment should keep type names and top-level folders unique.
+The gateway enforces declared document types, their top-level folders, and
+required sections. The remaining policy keys document deployment policy for
+agents and maintainers.
+
+Once a bundle contains knowledge, changing its taxonomy requires a durable
+decision and a migration plan. Adding undeclared types during ordinary capture
+is not allowed. Before switching `KB_TAXONOMY_PATH`, record the reason, map
+affected documents and links, migrate the bundle, and validate the complete
+bundle against the proposed taxonomy.
 
 ## 6. LLM Wiki maintenance method
 
@@ -170,12 +223,26 @@ the OKF bundle and pass bundle validation.
 
 This repository is the canonical distribution source:
 
+- `gateway/` contains the buildable FastMCP reference implementation and its
+  tests; it never contains runtime data.
 - `skills/maintain-llm-wiki/` contains the cross-agent workflow.
 - `rules/knowledge-base.md` contains the invariant policy.
 - `hooks/` contains deterministic repository checks.
-- `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/` are thin vendor adapters.
+- `templates/runtime/` contains the active vendor adapters installed into a
+  project whose agents are connected to a Knowledge Gateway.
+- the root `AGENTS.md` and `CLAUDE.md` govern development of the distribution
+  kit only and do not activate the runtime workflow.
 
-Adapters must point to the canonical assets and must not grow divergent copies of the policy. The installer links the same skill directory into supported user-level agent locations.
+Runtime adapters must point to the canonical assets and must not grow divergent
+copies of the policy. The installer copies those assets into the selected
+project's `.agents/` directory. It must not install the skill globally or
+activate the source repository, because either action would make unrelated
+sessions behave as if they had a configured knowledge base.
+
+Activation is a deployment step and occurs only after the target agents have a
+configured gateway connection. Projects with existing agent instructions
+install the shared assets and merge the relevant runtime adapter template
+manually.
 
 The repository must not contain a `knowledge/` directory, live OKF documents,
 or a copy of the backup payload.

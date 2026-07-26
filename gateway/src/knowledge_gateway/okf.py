@@ -1,0 +1,159 @@
+"""OKF Markdown parsing and profile validation."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path, PurePosixPath
+
+import yaml
+
+from .errors import ConfigurationError, ValidationError
+from .models import ParsedDocument, TaxonomyType
+
+REQUIRED_METADATA = ("type", "title", "description", "status", "tags", "generated")
+FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
+def load_taxonomy(path: Path) -> dict[str, TaxonomyType]:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ConfigurationError(f"taxonomy file does not exist: {path}") from exc
+    except yaml.YAMLError as exc:
+        raise ConfigurationError(f"taxonomy is not valid YAML: {exc}") from exc
+
+    if not isinstance(raw, dict) or not isinstance(raw.get("types"), list):
+        raise ConfigurationError("taxonomy must contain a types list")
+
+    result: dict[str, TaxonomyType] = {}
+    for item in raw["types"]:
+        if not isinstance(item, dict):
+            raise ConfigurationError("each taxonomy type must be an object")
+        try:
+            entry = TaxonomyType(
+                name=str(item["type"]),
+                folder=str(item["folder"]).strip("/"),
+                sections=tuple(str(section) for section in item.get("sections", [])),
+            )
+        except KeyError as exc:
+            raise ConfigurationError(f"taxonomy type lacks {exc.args[0]}") from exc
+        result[entry.name] = entry
+    return result
+
+
+def normalize_document_path(value: str) -> str:
+    """Return a safe bundle-relative Markdown path."""
+    if not value or "\\" in value:
+        raise ValidationError("path must be a non-empty POSIX path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts or "." in path.parts:
+        raise ValidationError("path must stay inside the bundle")
+    if any(part.startswith(".") for part in path.parts):
+        raise ValidationError("hidden paths are reserved by the gateway")
+    if path.suffix.lower() != ".md":
+        raise ValidationError("knowledge documents must use the .md extension")
+    return path.as_posix()
+
+
+def parse_document(content: str) -> ParsedDocument:
+    match = FRONTMATTER.match(content)
+    if not match:
+        raise ValidationError("document must begin with YAML frontmatter")
+    try:
+        metadata = yaml.safe_load(match.group(1))
+    except yaml.YAMLError as exc:
+        raise ValidationError(f"frontmatter is not valid YAML: {exc}") from exc
+    if not isinstance(metadata, dict):
+        raise ValidationError("frontmatter must be a YAML mapping")
+    return ParsedDocument(metadata=metadata, body=content[match.end() :], raw=content)
+
+
+def validate_document(
+    path: str,
+    content: str,
+    taxonomy: dict[str, TaxonomyType],
+) -> ParsedDocument:
+    normalized_path = normalize_document_path(path)
+    issues: list[dict[str, str]] = []
+    try:
+        document = parse_document(content)
+    except ValidationError as exc:
+        raise ValidationError(str(exc), [{"path": normalized_path, "message": str(exc)}]) from exc
+
+    for key in REQUIRED_METADATA:
+        if key not in document.metadata:
+            issues.append({"path": normalized_path, "message": f"missing metadata: {key}"})
+
+    document_type = document.metadata.get("type")
+    taxonomy_type = taxonomy.get(str(document_type))
+    if taxonomy_type is None:
+        issues.append(
+            {"path": normalized_path, "message": f"unknown document type: {document_type}"}
+        )
+    else:
+        top_folder = PurePosixPath(normalized_path).parts[0]
+        if top_folder != taxonomy_type.folder:
+            issues.append(
+                {
+                    "path": normalized_path,
+                    "message": (
+                        f"type {taxonomy_type.name} must be stored under "
+                        f"{taxonomy_type.folder}/"
+                    ),
+                }
+            )
+        headings = set(re.findall(r"^##\s+(.+?)\s*$", document.body, re.MULTILINE))
+        for section in taxonomy_type.sections:
+            if section not in headings:
+                issues.append(
+                    {
+                        "path": normalized_path,
+                        "message": f"missing required section: {section}",
+                    }
+                )
+
+    title = document.metadata.get("title")
+    description = document.metadata.get("description")
+    tags = document.metadata.get("tags")
+    generated = document.metadata.get("generated")
+    if "title" in document.metadata and (not isinstance(title, str) or not title.strip()):
+        issues.append({"path": normalized_path, "message": "title must be a non-empty string"})
+    if "description" in document.metadata and (
+        not isinstance(description, str) or not description.strip()
+    ):
+        issues.append(
+            {"path": normalized_path, "message": "description must be a non-empty string"}
+        )
+    if "tags" in document.metadata and (
+        not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags)
+    ):
+        issues.append({"path": normalized_path, "message": "tags must be a list of strings"})
+    if "generated" in document.metadata and not isinstance(generated, bool):
+        issues.append({"path": normalized_path, "message": "generated must be a boolean"})
+
+    for link in re.findall(r"\[[^\]]+\]\(([^)]+)\)", document.body):
+        if link.startswith(("#", "http://", "https://", "mailto:")):
+            continue
+        if not link.startswith("/"):
+            issues.append(
+                {
+                    "path": normalized_path,
+                    "message": f"internal link must be bundle-absolute: {link}",
+                }
+            )
+
+    if issues:
+        raise ValidationError("document does not satisfy the OKF profile", issues)
+    return document
+
+
+def find_markdown_files(bundle_path: Path) -> list[Path]:
+    """Return knowledge documents while excluding gateway and Git internals."""
+    if not bundle_path.exists():
+        return []
+    return sorted(
+        path
+        for path in bundle_path.rglob("*.md")
+        if ".git" not in path.parts and not any(part.startswith(".") for part in path.parts)
+    )
+

@@ -1,7 +1,9 @@
-# Claude Code Adapter
+# Claude Code Repository Adapter
 
-Follow [AGENTS.md](AGENTS.md) and load `skills/maintain-llm-wiki/SKILL.md` for every durable knowledge-base operation.
+Follow [AGENTS.md](AGENTS.md) while maintaining this agent-kit source
+repository. This checkout is not a connected knowledge base, so do not activate
+the runtime maintenance skill or call a Knowledge Gateway merely because the
+skill and rule sources are present here.
 
-The Knowledge Gateway is the live authority. This Git repository is only the
-canonical source of shared agent behavior; knowledge content and backups belong
-in separate storage.
+The deployable Claude Code adapter is
+`templates/runtime/CLAUDE.md`.
