@@ -1,0 +1,35 @@
+version: 1
+policy:
+  unknown_types: reject
+  type_changes_require_decision: true
+  internal_links: bundle_absolute
+types:
+  - type: Concept
+    folder: concepts
+    purpose: Durable explanation of one idea, system, or mental model.
+    sections: [Summary, Details, Relationships]
+  - type: Decision
+    folder: decisions
+    purpose: A choice with context, rationale, consequences, and status.
+    sections: [Context, Decision, Consequences]
+  - type: Project
+    folder: projects
+    purpose: Durable state and context for an ongoing project.
+    sections: [Outcome, Current State, Next Actions]
+  - type: Procedure
+    folder: procedures
+    purpose: A repeatable operational workflow.
+    sections: [Purpose, Preconditions, Steps, Verification]
+  - type: Reference
+    folder: references
+    purpose: Curated notes about an external source or stable fact set.
+    sections: [Summary, Key Points, Source]
+  - type: Person
+    folder: people
+    purpose: Relevant durable context about a person, with privacy restraint.
+    sections: [Context, Relevant Facts]
+  - type: Capture
+    folder: inbox
+    purpose: Temporary unclassified material that must be reviewed or promoted.
+    sections: [Capture, Review]
+

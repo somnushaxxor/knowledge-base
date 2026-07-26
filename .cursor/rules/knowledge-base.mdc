@@ -1,0 +1,9 @@
+---
+description: Shared cloud-first knowledge-base policy
+alwaysApply: true
+---
+
+Follow `/AGENTS.md` and `/rules/knowledge-base.md`.
+
+For durable knowledge work, load `/skills/maintain-llm-wiki/SKILL.md`. Use the configured Knowledge Gateway for live reads and writes. Treat GitHub only as backup and agent-kit distribution.
+

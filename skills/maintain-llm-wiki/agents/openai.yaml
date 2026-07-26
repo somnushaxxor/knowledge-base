@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain LLM Wiki"
+  short_description: "Maintain a cloud-first OKF knowledge base"
+  default_prompt: "Use $maintain-llm-wiki to ingest this source into the shared knowledge base."
