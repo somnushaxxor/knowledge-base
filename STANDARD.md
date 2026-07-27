@@ -1,24 +1,23 @@
 # Cloud-First LLM Wiki Standard
 
-Status: **Draft v0.1**
+Status: **Draft v0.2**
 
 ## 1. Purpose
 
 This standard defines a knowledge base that:
 
-- can serve an individual, a project team, or another explicitly defined group;
-- is current across participants, computers, phones, and cloud agents;
-- can be read and changed concurrently by multiple people and agents;
+- serves one owner through that owner's computers, phones, and cloud agents;
+- stays current across those clients;
+- can be read and changed concurrently by the owner's agents and devices;
 - remains portable, human-readable, and usable without a vendor;
 - distributes the same maintenance behavior to Codex, Claude Code, Cursor, NanoClaw, and future agents;
 - has a versioned backup separate from this agent-kit repository.
 
-Personal and project knowledge bases are deployment profiles of the same
-concept, not separate architectures. Every deployed knowledge base has an
-explicit scope, membership, and authorization policy. A project deployment
-acts as shared project memory: authorized participants and their agents work
-with the same canonical knowledge, while changes remain attributable to the
-human, agent, or process that made them.
+The current profile is intentionally single-user. One deployed gateway serves
+one knowledge-base scope and accepts one operator-generated bearer token. That
+token grants access to the complete MCP tool surface. Membership, multiple
+users, roles, per-tool permissions, and an OAuth authorization server are
+outside this version of the standard.
 
 ## 2. Chosen stack
 
@@ -26,18 +25,18 @@ human, agent, or process that made them.
 |---|---|---|
 | Knowledge method | [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) | Maintain a small, linked, evolving wiki rather than an append-only transcript |
 | Canonical format | [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) | Markdown, YAML frontmatter, sources, provenance, links, and reserved indexes |
-| Live authority | Custom Knowledge Gateway on one cloud host, implemented with FastMCP | Authenticate agents, search, read, serialize writes, validate, and return durable revisions |
+| Live authority | Custom Knowledge Gateway on one cloud host, implemented with FastMCP | Verify the shared bearer token, search, read, serialize writes, validate, and return durable revisions |
 | Agent protocol | MCP over Streamable HTTP | Give different agents one standard remote tool surface |
 | Lexical search | SQLite FTS5 or QMD-compatible local index | Fast full-text retrieval over the live OKF bundle |
 | Semantic search | Optional derived vector index | Improve recall; always rebuildable from OKF |
 | Backup | Local Git history pushed to a separate private Git repository | Off-site, reviewable, versioned recovery copy without mixing knowledge content into the agent kit |
 | Agent behavior | Canonical skill, rules, and hooks in this repository | Make all agents follow the same workflow |
 
-The gateway is custom because no sufficiently established project currently combines strict OKF storage, remote MCP, authenticated multi-writer concurrency, and explicit backup semantics. It should be small and boring: use mature libraries, keep OKF as the source of truth, and avoid inventing a database-specific knowledge format.
+The gateway is custom because no sufficiently established project currently combines strict OKF storage, remote MCP, optimistic concurrency, and explicit backup semantics. It should be small and boring: use mature libraries, keep OKF as the source of truth, and avoid inventing a database-specific knowledge format.
 
 The buildable reference implementation lives in `gateway/`. FastMCP provides
 the MCP protocol and Streamable HTTP transport; the custom code owns the OKF
-profile, scope authorization, optimistic-concurrency protocol, idempotency,
+profile, bearer-token verification, optimistic-concurrency protocol, idempotency,
 audit receipts, Git history, and backup semantics.
 
 ### Implementation decision
@@ -45,7 +44,7 @@ audit receipts, Git history, and backup semantics.
 The reference gateway is implemented in Python on FastMCP 3.x so the project
 can spend its complexity budget on knowledge storage and consistency instead
 of reimplementing MCP. FastMCP owns protocol negotiation, tool schemas,
-Streamable HTTP, test clients, and JWT verification integration. The domain
+Streamable HTTP, test clients, and bearer-authentication middleware. The domain
 service remains independent of the transport framework.
 
 The dependency is constrained to `fastmcp>=3.4,<4`. A major-version upgrade
@@ -55,23 +54,21 @@ technology boundary.
 
 ## 3. Authority and consistency
 
-There is exactly one live authority for each knowledge-base scope: the
-persistent OKF bundle mounted by its Knowledge Gateway. A deployment may host
-multiple scopes only when it provides equivalent workspace isolation,
-authorization, and backup boundaries.
+There is exactly one live authority and one configured scope: the persistent
+OKF bundle mounted by its Knowledge Gateway. Hosting multiple independent
+scopes in one gateway process is outside this profile.
 
 Agents must not:
 
 - use GitHub as the source for live reads;
 - edit the live files through SSH, Drive sync, or a second server;
 - maintain a private canonical memory that is invisible to other agents;
-- read or write knowledge outside the scope authorized for their participant or project;
+- send a scope other than the gateway's configured scope;
 - claim that a fact was saved when the gateway did not return a write receipt.
 
-All successful gateway writes are visible to subsequent reads immediately. A
-project participant, a phone agent, and a desktop agent therefore see the same
-accepted revision within their shared scope even if the separate Git backup is
-temporarily delayed.
+All successful gateway writes are visible to subsequent reads immediately. The
+owner's phone agent and desktop agent therefore see the same accepted revision
+even if the separate Git backup is temporarily delayed.
 
 ## 4. Gateway contract
 
@@ -88,21 +85,19 @@ The gateway exposes a small MCP tool surface:
 | `kb_validate` | Validate a proposed document or the whole bundle |
 | `kb_backup_status` | Report GitHub and snapshot recovery points and backup lag |
 
-Every mutation requires:
+Every MCP request requires the configured bearer token. Every mutation also
+requires:
 
-- an authenticated actor identity derived from its credential;
-- the knowledge-base scope and an authorization check for that scope;
+- the gateway's configured knowledge-base scope;
 - an idempotency key;
 - `expected_revision` for an update, or an explicit create-only condition;
 - a complete OKF document;
 - an audit reason or source reference.
 
-The actor identifies the human, agent, or process making the change. When an
-agent acts on behalf of a person or project role, the audit record should
-preserve both the agent identity and the delegating principal where the
-authentication system can provide them.
+All authenticated calls use the fixed audit actor `single-user`. This profile
+does not distinguish which of the owner's clients used the shared token.
 
-The gateway authorizes the scoped operation, performs validation, obtains a
+The gateway verifies the bearer token and scope, performs validation, obtains a
 per-document lock, checks the expected revision, writes atomically, updates the
 search projection, and creates a local Git commit. It then returns:
 
@@ -180,17 +175,19 @@ The wiki is curated, not merely accumulated:
 6. Periodically merge duplicates, split overloaded pages, repair links, and archive obsolete pages.
 7. Treat semantic and vector indexes as disposable projections, never as the only copy.
 
-No permanently running “wiki-building agent” is required. Any authorized agent can maintain the wiki by loading the same skill and calling the gateway. Scheduled maintenance agents are optional and use the same contract.
+No permanently running “wiki-building agent” is required. Any of the owner's
+configured agents can maintain the wiki by loading the same skill and calling
+the gateway with the shared bearer token. Scheduled maintenance agents are
+optional and use the same contract.
 
-In a project knowledge base, maintenance is a collaborative operation:
+Maintenance may be concurrent across the owner's clients:
 
-- all authorized participants and agents search and update the same canonical
-  concepts instead of keeping isolated private copies;
-- permissions may distinguish readers, contributors, and administrators;
-- provenance and revision history make contributions attributable and
-  reviewable;
+- all clients search and update the same canonical concepts instead of keeping
+  isolated private copies;
+- every authenticated client has the same complete MCP access;
+- provenance and revision history attribute mutations to `single-user`;
 - concurrent edits follow the same optimistic-concurrency protocol regardless
-  of whether they originated from different people, agents, or devices.
+  of which agent or device originated them.
 
 ## 7. Backup and recovery
 
@@ -249,7 +246,7 @@ or a copy of the backup payload.
 Runtime configuration is external to Git:
 
 - gateway URL;
-- bearer tokens;
+- the single bearer token;
 - encryption keys;
 - GitHub deployment credentials;
 - snapshot credentials.
@@ -259,31 +256,38 @@ Commit only examples or variable names, never live secrets.
 ## 9. Security baseline
 
 - Use TLS for every remote connection.
-- Issue a different revocable credential per person, agent, service, or device.
-- Define membership separately for every personal, project, or organizational
-  knowledge-base scope.
-- Separate reader, contributor, and administrator roles.
-- Enforce scope boundaries on every read, search, history, and mutation
-  operation, not only on writes.
-- Limit contributor paths and operations where practical.
+- Generate `KB_ACCESS_TOKEN` from at least 32 random bytes.
+- Supply the token through the runtime environment or a deployment secret
+  mechanism; never commit it, bake it into an image, pass it in a URL, or log
+  it.
+- Require `Authorization: Bearer <token>` on every remote MCP request.
+- Compare the presented token without ordinary string equality and reject every
+  other value.
+- Grant the authenticated single user access to all MCP tools. This profile has
+  no membership registry, roles, or per-tool permissions.
+- Rotate the token by changing the deployment secret and restarting the
+  gateway, then update every configured client.
+- Keep one gateway process bound to one knowledge-base scope.
 - Redact secrets before persistence and validate documents server-side.
-- Record mutations with actor, timestamp, previous revision, and reason.
-- Back up encrypted data and test token revocation.
-- Prevent one project scope from appearing in another project's search results,
-  semantic index, history, logs, or backups.
+- Record mutations with the fixed actor `single-user`, timestamp, previous
+  revision, and reason.
+- Back up encrypted data.
+
+This pre-shared-token profile deliberately does not implement the interactive
+OAuth discovery and authorization-server flow from the MCP authorization
+specification. It is an interim deployment choice for one trusted owner, not a
+multi-user authorization design.
 
 ## 10. Acceptance criteria
 
-The production system is acceptable when:
+The single-user system is acceptable when:
 
-1. two project participants or agents can concurrently edit the same page
+1. two clients using the configured token can concurrently edit the same page
    without silent loss;
-2. a successful write by one authorized participant is visible to another
-   authorized participant or agent on the next read;
-3. an unauthorized participant cannot discover or access another personal or
-   project scope;
-4. revision history attributes every accepted mutation to its actor and, when
-   applicable, its delegating principal;
+2. a successful write by one client is visible to another client on the next
+   read;
+3. a request with a missing or incorrect token cannot access any MCP tool;
+4. revision history attributes every accepted mutation to `single-user`;
 5. an unavailable GitHub does not create a second authority;
 6. backup lag and the last recovery point are observable;
 7. a clean machine can restore the bundle from the separate Git backup and pass validation;

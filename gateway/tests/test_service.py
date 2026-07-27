@@ -130,7 +130,7 @@ def test_archive_preserves_receipt_and_history(
     assert [item["operation"] for item in history["audit"]] == ["archive", "upsert"]
 
 
-def test_validation_and_scope_authorization(
+def test_validation_and_scope_boundary(
     service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:
     invalid = note.replace("## Relationships", "## Missing")
@@ -142,18 +142,6 @@ def test_validation_and_scope_authorization(
 
     with pytest.raises(AuthorizationError):
         service.overview(actor, "another-scope")
-
-    reader = Actor("reader", frozenset({"kb:read"}))
-    with pytest.raises(AuthorizationError):
-        service.upsert(
-            reader,
-            "test",
-            path="notes/fastmcp-gateway.md",
-            content=note,
-            idempotency_key="reader-write",
-            reason="Must be rejected",
-            create_only=True,
-        )
 
 
 def test_git_failure_rolls_back_unaccepted_file(

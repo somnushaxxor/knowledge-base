@@ -1,10 +1,9 @@
-# Shared Knowledge Base Agent Kit
+# Single-User Knowledge Base Agent Kit
 
 This repository contains the versioned standard, agent distribution kit, and
 buildable reference implementation of the Knowledge Gateway used by agents
-that maintain a knowledge base. The same architecture supports both a personal
-wiki and a shared project wiki used by multiple human participants and their
-agents.
+that maintain one owner's knowledge base. The owner's configured agents and
+devices share one bearer token and the complete MCP tool surface.
 
 It contains **neither the live knowledge base nor a backup of its content**.
 Agents read and write through one cloud-hosted Knowledge Gateway. The gateway

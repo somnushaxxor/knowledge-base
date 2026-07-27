@@ -7,11 +7,11 @@ description: Maintain, search, ingest, and curate the shared cloud-first LLM Wik
 
 ## Overview
 
-Use one cloud Knowledge Gateway as the live authority for the selected
-knowledge-base scope and OKF Markdown as the canonical representation. The
-scope may belong to an individual, a project team, or another explicitly
-defined group. Apply the same search-before-write, provenance, concurrency,
-authorization, and backup rules in every agent.
+Use one single-user cloud Knowledge Gateway as the live authority for its
+configured knowledge-base scope and OKF Markdown as the canonical
+representation. Every configured client uses the same bearer token and has
+access to the complete MCP tool surface. Apply the same search-before-write,
+provenance, concurrency, authentication, and backup rules in every agent.
 
 ## Non-negotiable rules
 
@@ -23,10 +23,8 @@ authorization, and backup rules in every agent.
 - Never use a private vector store or chat memory as the only copy.
 - Preserve unknown OKF metadata and source attribution.
 - Never overwrite a concurrent change with last-write-wins.
-- Never cross personal, project, or organizational scope boundaries; use only
-  the scope and role authorized for the current operation.
-- Preserve the actor and, when available, the delegating principal in mutation
-  provenance.
+- Use only the gateway's configured scope.
+- Treat mutation provenance as belonging to the fixed `single-user` actor.
 - Keep secrets and unredacted credentials out of the knowledge base.
 
 ## Choose the operation

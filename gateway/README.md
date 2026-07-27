@@ -63,10 +63,10 @@ endpoint is `http://127.0.0.1:8000/mcp`.
 
 There are no fallback values for required runtime environment variables. The
 process fails during import/startup and names the missing variable. Variables
-that are conditional on a selected mode fail validation too: JWT settings are
-required in JWT mode, and `KB_LOCAL_ACTOR` is required when authentication is
-disabled. `KB_SNAPSHOT_STATUS_PATH` is genuinely optional because the
-independent snapshot integration itself is optional.
+that are conditional on a selected mode fail validation too:
+`KB_ACCESS_TOKEN` is required in token mode, and `KB_LOCAL_ACTOR` is required
+when authentication is disabled. `KB_SNAPSHOT_STATUS_PATH` is genuinely
+optional because the independent snapshot integration itself is optional.
 
 Run tests:
 
@@ -92,7 +92,7 @@ For Compose:
 ```bash
 cd gateway
 cp .env.example .env
-# Select KB_TAXONOMY_FILE and fill in the identity-provider values.
+# Select KB_TAXONOMY_FILE and generate KB_ACCESS_TOKEN.
 # Never commit .env.
 docker compose up --build
 ```
@@ -102,18 +102,26 @@ prepared for that deployment. The service is published only on host loopback.
 Put a TLS reverse proxy in front of remote deployments and keep `/data` on
 persistent storage.
 
-## JWT actor contract
+## Single-user bearer-token contract
 
-With `KB_AUTH_MODE=jwt`, the gateway verifies bearer tokens using the configured
-JWKS URI, issuer, and audience. It derives:
+With `KB_AUTH_MODE=token`, the gateway accepts exactly the opaque bearer token
+stored in `KB_ACCESS_TOKEN`. Generate it from at least 32 random bytes:
 
-- actor identity from `sub`, then `client_id`;
-- permissions from the token scopes `kb:read`, `kb:write`, and `kb:admin`;
-- an optional delegating principal from `delegating_principal` or the standard
-  actor (`act`) claim.
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
-Use separate, revocable credentials per participant, agent, or device. A
-reverse proxy does not replace token validation.
+Configure every MCP client to send it as
+`Authorization: Bearer <token>`. A successful match grants access to all eight
+tools and records mutations as `single-user`. There are no roles, per-tool
+permissions, membership records, JWT claims, or token expiry in this profile.
+
+The comparison is constant-time. Never commit or log the token, pass it in a
+URL, or expose the remote endpoint without TLS. Rotation means replacing the
+deployment secret, restarting the gateway, and updating every client.
+
+This is deliberately a pre-shared-token profile rather than a full MCP OAuth
+authorization-server and discovery implementation.
 
 ## Runtime storage
 
@@ -153,7 +161,7 @@ Runtime data is deliberately split from source code:
 
 The repository-wide mutation lock is intentional: Git has one shared index, so
 per-document locks alone could let one mutation enter another mutation's
-commit. A write therefore authenticates and authorizes the actor, checks
+commit. A write therefore authenticates the single user, checks
 idempotency, validates the complete document, acquires the mutation lock,
 compares the current revision, atomically replaces the file, creates the local
 Git commit, and then records the FTS projection and receipt.
@@ -169,7 +177,7 @@ supported until a dedicated mutation coordinator exists.
 ## Production hardening still required
 
 - terminate TLS and apply network policy;
-- connect a production identity provider and test revocation;
+- store `KB_ACCESS_TOKEN` in a deployment secret manager and document rotation;
 - replace inline best-effort pushes with a supervised retry worker and alerts;
 - add encrypted daily/weekly/monthly snapshots plus restore drills;
 - add an operation journal to reconcile the narrow crash window between a Git

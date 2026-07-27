@@ -39,9 +39,7 @@ class Settings:
     log_level: str
     push_after_write: bool
     git_remote: str
-    jwt_jwks_uri: str | None = None
-    jwt_issuer: str | None = None
-    jwt_audience: str | None = None
+    access_token: str | None = None
     snapshot_status_path: Path | None = None
     local_actor: str | None = None
 
@@ -66,9 +64,7 @@ class Settings:
             log_level=_required_env("KB_LOG_LEVEL").upper(),
             push_after_write=push_after_write,
             git_remote=_required_env("KB_GIT_REMOTE"),
-            jwt_jwks_uri=os.getenv("KB_JWT_JWKS_URI"),
-            jwt_issuer=os.getenv("KB_JWT_ISSUER"),
-            jwt_audience=os.getenv("KB_JWT_AUDIENCE"),
+            access_token=os.getenv("KB_ACCESS_TOKEN"),
             snapshot_status_path=Path(snapshot) if snapshot else None,
             local_actor=os.getenv("KB_LOCAL_ACTOR"),
         )
@@ -76,22 +72,18 @@ class Settings:
     def validate(self) -> None:
         if not self.scope:
             raise ConfigurationError("KB_SCOPE must not be empty")
-        if self.auth_mode not in {"jwt", "disabled"}:
-            raise ConfigurationError("KB_AUTH_MODE must be 'jwt' or 'disabled'")
-        if self.auth_mode == "jwt":
-            missing = [
-                name
-                for name, value in (
-                    ("KB_JWT_JWKS_URI", self.jwt_jwks_uri),
-                    ("KB_JWT_ISSUER", self.jwt_issuer),
-                    ("KB_JWT_AUDIENCE", self.jwt_audience),
-                )
-                if not value
-            ]
-            if missing:
-                raise ConfigurationError(
-                    "JWT authentication requires " + ", ".join(missing)
-                )
+        if self.auth_mode not in {"token", "disabled"}:
+            raise ConfigurationError("KB_AUTH_MODE must be 'token' or 'disabled'")
+        if self.auth_mode == "token" and (
+            self.access_token is None or not self.access_token.strip()
+        ):
+            raise ConfigurationError(
+                "KB_ACCESS_TOKEN is required when KB_AUTH_MODE=token"
+            )
+        if self.auth_mode == "token" and len(str(self.access_token)) < 32:
+            raise ConfigurationError(
+                "KB_ACCESS_TOKEN must contain at least 32 characters"
+            )
         if self.auth_mode == "disabled" and self.host not in {"127.0.0.1", "::1", "localhost"}:
             raise ConfigurationError(
                 "authentication may be disabled only when KB_HOST is loopback"

@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
 
+from .auth import SINGLE_USER_ACTOR_ID, SingleUserTokenVerifier
 from .config import Settings
 from .errors import ConfigurationError, GatewayError
 from .models import Actor
@@ -19,13 +20,7 @@ from .service import KnowledgeGateway
 def build_auth(settings: Settings) -> Any | None:
     if settings.auth_mode == "disabled":
         return None
-    from fastmcp.server.auth.providers.jwt import JWTVerifier
-
-    return JWTVerifier(
-        jwks_uri=settings.jwt_jwks_uri,
-        issuer=settings.jwt_issuer,
-        audience=settings.jwt_audience,
-    )
+    return SingleUserTokenVerifier(str(settings.access_token))
 
 
 def actor_from_request(settings: Settings) -> Actor:
@@ -33,34 +28,8 @@ def actor_from_request(settings: Settings) -> Actor:
     if token is None:
         if settings.auth_mode != "disabled":
             raise ToolError("authenticated access token is required")
-        return Actor(
-            actor_id=str(settings.local_actor),
-            scopes=frozenset({"kb:read", "kb:write", "kb:admin"}),
-        )
-
-    claims = getattr(token, "claims", {}) or {}
-    actor_id = (
-        claims.get("sub")
-        or getattr(token, "client_id", None)
-        or claims.get("client_id")
-    )
-    if not actor_id:
-        raise ToolError("access token has no stable actor identity")
-    raw_scopes = getattr(token, "scopes", None) or claims.get("scope", [])
-    if isinstance(raw_scopes, str):
-        scopes = frozenset(raw_scopes.split())
-    else:
-        scopes = frozenset(str(scope) for scope in raw_scopes)
-    delegating_principal = claims.get("delegating_principal") or claims.get("act")
-    if isinstance(delegating_principal, dict):
-        delegating_principal = delegating_principal.get("sub")
-    return Actor(
-        actor_id=str(actor_id),
-        scopes=scopes,
-        delegating_principal=(
-            str(delegating_principal) if delegating_principal else None
-        ),
-    )
+        return Actor(actor_id=str(settings.local_actor))
+    return Actor(actor_id=SINGLE_USER_ACTOR_ID)
 
 
 async def _call(function: Callable[..., dict[str, object]], *args: Any, **kwargs: Any):

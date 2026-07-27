@@ -63,7 +63,7 @@ class KnowledgeGateway:
             self._ready = True
 
     def overview(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         validation = self.validate_bundle(actor, scope)
         return {
@@ -93,7 +93,7 @@ class KnowledgeGateway:
         status: str | None = None,
         tags: list[str] | None = None,
     ) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         if limit < 1 or limit > 100:
             raise ValidationError("limit must be between 1 and 100")
@@ -111,7 +111,7 @@ class KnowledgeGateway:
         return {"scope": scope, "query": query, "count": len(results), "results": results}
 
     def get(self, actor: Actor, scope: str, path: str) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         target = self._target(normalized)
@@ -139,7 +139,7 @@ class KnowledgeGateway:
         expected_revision: str | None = None,
         create_only: bool = False,
     ) -> dict[str, object]:
-        self._authorize(actor, scope, write=True)
+        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         self._require_mutation_fields(idempotency_key, reason)
@@ -189,7 +189,7 @@ class KnowledgeGateway:
                     operation="upsert",
                     actor_id=actor.actor_id,
                     reason=reason,
-                    delegating_principal=actor.delegating_principal,
+                    delegating_principal=None,
                 )
             except Exception:
                 self.git.unstage([normalized])
@@ -226,7 +226,7 @@ class KnowledgeGateway:
                     "path": normalized,
                     "operation": "upsert",
                     "actor_id": actor.actor_id,
-                    "delegating_principal": actor.delegating_principal,
+                    "delegating_principal": None,
                     "previous_revision": previous_revision,
                     "revision": revision,
                     "commit_hash": commit,
@@ -246,7 +246,7 @@ class KnowledgeGateway:
         idempotency_key: str,
         reason: str,
     ) -> dict[str, object]:
-        self._authorize(actor, scope, write=True)
+        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         self._require_mutation_fields(idempotency_key, reason)
@@ -289,7 +289,7 @@ class KnowledgeGateway:
                     operation="archive",
                     actor_id=actor.actor_id,
                     reason=reason,
-                    delegating_principal=actor.delegating_principal,
+                    delegating_principal=None,
                 )
             except Exception:
                 self.git.unstage([normalized, archived_path])
@@ -322,7 +322,7 @@ class KnowledgeGateway:
                     "path": normalized,
                     "operation": "archive",
                     "actor_id": actor.actor_id,
-                    "delegating_principal": actor.delegating_principal,
+                    "delegating_principal": None,
                     "previous_revision": current_revision,
                     "revision": current_revision,
                     "commit_hash": commit,
@@ -335,7 +335,7 @@ class KnowledgeGateway:
     def history(
         self, actor: Actor, scope: str, path: str, limit: int = 20
     ) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         if limit < 1 or limit > 100:
@@ -350,7 +350,7 @@ class KnowledgeGateway:
     def validate_proposed(
         self, actor: Actor, scope: str, path: str, content: str
     ) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         try:
             validate_document(path, content, self.taxonomy)
         except ValidationError as exc:
@@ -358,7 +358,7 @@ class KnowledgeGateway:
         return {"valid": True, "issue_count": 0, "issues": []}
 
     def validate_bundle(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         issues: list[dict[str, str]] = []
         for file_path in find_markdown_files(self.settings.bundle_path):
@@ -381,7 +381,7 @@ class KnowledgeGateway:
         return {"valid": not issues, "issue_count": len(issues), "issues": issues}
 
     def backup_status(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(actor, scope, write=False)
+        self._authorize(scope)
         self.ensure_ready()
         git_status = self.git.backup_status()
         snapshot: dict[str, object] = {"status": "not_configured"}
@@ -411,13 +411,9 @@ class KnowledgeGateway:
                 self._index_row(relative, revision_for(content), document, now())
             )
 
-    def _authorize(self, actor: Actor, scope: str, *, write: bool) -> None:
+    def _authorize(self, scope: str) -> None:
         if scope != self.settings.scope:
             raise AuthorizationError("scope is not available to this gateway instance")
-        allowed = actor.can_write() if write else actor.can_read()
-        if not allowed:
-            operation = "write" if write else "read"
-            raise AuthorizationError(f"actor lacks {operation} permission")
 
     def _target(self, normalized_path: str) -> Path:
         target = self.settings.bundle_path.joinpath(*normalized_path.split("/"))

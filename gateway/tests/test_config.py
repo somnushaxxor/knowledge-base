@@ -45,7 +45,7 @@ def test_empty_required_environment_fails_fast(monkeypatch: pytest.MonkeyPatch) 
         Settings.from_env()
 
 
-def test_selected_jwt_mode_requires_its_environment(
+def test_selected_token_mode_requires_access_token(
     monkeypatch: pytest.MonkeyPatch, taxonomy_path
 ) -> None:
     values = {
@@ -53,7 +53,7 @@ def test_selected_jwt_mode_requires_its_environment(
         "KB_STATE_PATH": "/tmp/state",
         "KB_TAXONOMY_PATH": str(taxonomy_path),
         "KB_SCOPE": "test",
-        "KB_AUTH_MODE": "jwt",
+        "KB_AUTH_MODE": "token",
         "KB_HOST": "0.0.0.0",
         "KB_PORT": "8000",
         "KB_MCP_PATH": "/mcp",
@@ -63,14 +63,30 @@ def test_selected_jwt_mode_requires_its_environment(
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
-    for name in ("KB_JWT_JWKS_URI", "KB_JWT_ISSUER", "KB_JWT_AUDIENCE"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("KB_ACCESS_TOKEN", raising=False)
 
     with pytest.raises(
         ConfigurationError,
-        match="JWT authentication requires KB_JWT_JWKS_URI",
+        match="KB_ACCESS_TOKEN is required when KB_AUTH_MODE=token",
     ):
         Settings.from_env().validate()
+
+
+def test_selected_token_mode_rejects_short_token(settings: Settings) -> None:
+    token_settings = Settings(
+        **{
+            **settings.__dict__,
+            "auth_mode": "token",
+            "access_token": "too-short",
+            "host": "0.0.0.0",
+        }
+    )
+
+    with pytest.raises(
+        ConfigurationError,
+        match="KB_ACCESS_TOKEN must contain at least 32 characters",
+    ):
+        token_settings.validate()
 
 
 def test_runtime_data_cannot_live_in_source_repository(

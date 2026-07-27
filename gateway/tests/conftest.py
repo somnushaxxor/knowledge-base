@@ -71,11 +71,7 @@ def service(settings: Settings) -> KnowledgeGateway:
 
 @pytest.fixture
 def actor() -> Actor:
-    return Actor(
-        actor_id="agent:test",
-        scopes=frozenset({"kb:read", "kb:write"}),
-        delegating_principal="human:test",
-    )
+    return Actor(actor_id="agent:test")
 
 
 @pytest.fixture
