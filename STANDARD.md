@@ -11,7 +11,7 @@ This standard defines a knowledge base that:
 - can be read and changed concurrently by multiple people and agents;
 - remains portable, human-readable, and usable without a vendor;
 - distributes the same maintenance behavior to Codex, Claude Code, Cursor, NanoClaw, and future agents;
-- has a versioned backup separate from this agent-kit repository and an independent disaster-recovery backup.
+- has a versioned backup separate from this agent-kit repository.
 
 Personal and project knowledge bases are deployment profiles of the same
 concept, not separate architectures. Every deployed knowledge base has an
@@ -31,7 +31,6 @@ human, agent, or process that made them.
 | Lexical search | SQLite FTS5 or QMD-compatible local index | Fast full-text retrieval over the live OKF bundle |
 | Semantic search | Optional derived vector index | Improve recall; always rebuildable from OKF |
 | Backup | Local Git history pushed to a separate private Git repository | Off-site, reviewable, versioned recovery copy without mixing knowledge content into the agent kit |
-| Disaster recovery | Encrypted provider snapshot/object-store archive | Recover when both the live disk and Git remote are unavailable |
 | Agent behavior | Canonical skill, rules, and hooks in this repository | Make all agents follow the same workflow |
 
 The gateway is custom because no sufficiently established project currently combines strict OKF storage, remote MCP, authenticated multi-writer concurrency, and explicit backup semantics. It should be small and boring: use mature libraries, keep OKF as the source of truth, and avoid inventing a database-specific knowledge format.
