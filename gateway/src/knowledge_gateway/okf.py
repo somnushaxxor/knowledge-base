@@ -72,6 +72,8 @@ def validate_document(
     path: str,
     content: str,
     taxonomy: dict[str, TaxonomyType],
+    *,
+    require_sections: bool = True,
 ) -> ParsedDocument:
     normalized_path = normalize_document_path(path)
     issues: list[dict[str, str]] = []
@@ -102,15 +104,16 @@ def validate_document(
                     ),
                 }
             )
-        headings = set(re.findall(r"^##\s+(.+?)\s*$", document.body, re.MULTILINE))
-        for section in taxonomy_type.sections:
-            if section not in headings:
-                issues.append(
-                    {
-                        "path": normalized_path,
-                        "message": f"missing required section: {section}",
-                    }
-                )
+        if require_sections:
+            headings = set(re.findall(r"^##\s+(.+?)\s*$", document.body, re.MULTILINE))
+            for section in taxonomy_type.sections:
+                if section not in headings:
+                    issues.append(
+                        {
+                            "path": normalized_path,
+                            "message": f"missing required section: {section}",
+                        }
+                    )
 
     title = document.metadata.get("title")
     description = document.metadata.get("description")
@@ -128,8 +131,25 @@ def validate_document(
         not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags)
     ):
         issues.append({"path": normalized_path, "message": "tags must be a list of strings"})
-    if "generated" in document.metadata and not isinstance(generated, bool):
-        issues.append({"path": normalized_path, "message": "generated must be a boolean"})
+    if "generated" in document.metadata:
+        # Accept OKF boolean or the object form used by my-memory: {by, at}.
+        if isinstance(generated, bool):
+            pass
+        elif (
+            isinstance(generated, dict)
+            and isinstance(generated.get("by"), str)
+            and generated["by"].strip()
+            and isinstance(generated.get("at"), str)
+            and generated["at"].strip()
+        ):
+            pass
+        else:
+            issues.append(
+                {
+                    "path": normalized_path,
+                    "message": "generated must be a boolean or {by, at} object",
+                }
+            )
 
     for link in re.findall(r"\[[^\]]+\]\(([^)]+)\)", document.body):
         if link.startswith(("#", "http://", "https://", "mailto:")):

@@ -157,7 +157,12 @@ class KnowledgeGateway:
         replay = self._idempotent_replay(actor, idempotency_key, request_hash)
         if replay is not None:
             return replay
-        document = validate_document(normalized, content, self.taxonomy)
+        document = validate_document(
+            normalized,
+            content,
+            self.taxonomy,
+            require_sections=self.settings.require_sections,
+        )
 
         with self._mutation_lock():
             replay = self._idempotent_replay(actor, idempotency_key, request_hash)
@@ -352,7 +357,12 @@ class KnowledgeGateway:
     ) -> dict[str, object]:
         self._authorize(scope)
         try:
-            validate_document(path, content, self.taxonomy)
+            validate_document(
+                path,
+                content,
+                self.taxonomy,
+                require_sections=self.settings.require_sections,
+            )
         except ValidationError as exc:
             return {"valid": False, "issue_count": len(exc.issues), "issues": exc.issues}
         return {"valid": True, "issue_count": 0, "issues": []}
@@ -369,6 +379,7 @@ class KnowledgeGateway:
                     validation_path,
                     file_path.read_text(encoding="utf-8"),
                     self.taxonomy,
+                    require_sections=self.settings.require_sections,
                 )
             except (OSError, UnicodeError, ValidationError) as exc:
                 if isinstance(exc, ValidationError) and exc.issues:
@@ -383,18 +394,7 @@ class KnowledgeGateway:
     def backup_status(self, actor: Actor, scope: str) -> dict[str, object]:
         self._authorize(scope)
         self.ensure_ready()
-        git_status = self.git.backup_status()
-        snapshot: dict[str, object] = {"status": "not_configured"}
-        snapshot_path = self.settings.snapshot_status_path
-        if snapshot_path:
-            try:
-                loaded = json.loads(snapshot_path.read_text(encoding="utf-8"))
-                snapshot = loaded if isinstance(loaded, dict) else {"status": "invalid"}
-            except FileNotFoundError:
-                snapshot = {"status": "missing", "path": str(snapshot_path)}
-            except json.JSONDecodeError as exc:
-                snapshot = {"status": "invalid", "error": str(exc)}
-        return {"scope": scope, "git": git_status, "snapshot": snapshot}
+        return {"scope": scope, "git": self.git.backup_status()}
 
     def rebuild_index(self) -> None:
         self.index.clear_documents()
@@ -404,7 +404,14 @@ class KnowledgeGateway:
                 continue
             try:
                 content = file_path.read_text(encoding="utf-8")
-                document = validate_document(relative, content, self.taxonomy)
+                # Index existing bundles even when section headings still drift
+                # from taxonomy; writes keep full require_sections=True checks.
+                document = validate_document(
+                    relative,
+                    content,
+                    self.taxonomy,
+                    require_sections=False,
+                )
             except (OSError, UnicodeError, ValidationError):
                 continue
             self.index.replace_document(

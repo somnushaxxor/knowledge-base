@@ -163,7 +163,7 @@ def create_mcp(
 
     @mcp.tool
     async def kb_backup_status(scope: str) -> dict[str, object]:
-        """Report local Git, remote Git, and independent snapshot recovery points."""
+        """Report local Git and remote Git backup recovery points."""
         return await _call(service.backup_status, actor_from_request(settings), scope)
 
     return mcp

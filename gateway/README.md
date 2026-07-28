@@ -20,7 +20,7 @@ environment.
 | `kb_archive` | Git-tracked move under `archive/` |
 | `kb_history` | Gateway audit receipts and local Git history |
 | `kb_validate` | Proposed-document or whole-bundle validation |
-| `kb_backup_status` | Local/remote Git and independent snapshot state |
+| `kb_backup_status` | Local and remote Git backup state |
 
 Every mutation is serialized with an OS file lock, written atomically, and
 committed to the bundle's local Git repository. A new document requires
@@ -65,8 +65,7 @@ There are no fallback values for required runtime environment variables. The
 process fails during import/startup and names the missing variable. Variables
 that are conditional on a selected mode fail validation too:
 `KB_ACCESS_TOKEN` is required in token mode, and `KB_LOCAL_ACTOR` is required
-when authentication is disabled. `KB_SNAPSHOT_STATUS_PATH` is genuinely
-optional because the independent snapshot integration itself is optional.
+when authentication is disabled.
 
 Run tests:
 
@@ -141,10 +140,6 @@ git -C /data/bundle remote add origin <private-backup-repository>
 failure leaves the accepted local write authoritative and reports the backup
 as pending.
 
-An independent snapshot job may atomically write JSON to
-`KB_SNAPSHOT_STATUS_PATH`; `kb_backup_status` returns it without treating it as
-authority.
-
 ## Runtime architecture and failure boundaries
 
 Runtime data is deliberately split from source code:
@@ -155,7 +150,6 @@ Runtime data is deliberately split from source code:
 └── state/
     ├── gateway.sqlite3         FTS projection, audit, and idempotency
     ├── backup.json             last observed Git backup state
-    ├── snapshot-status.json    optional snapshot-job hand-off
     └── locks/mutation.lock     cross-process mutation serialization
 ```
 
@@ -168,18 +162,18 @@ Git commit, and then records the FTS projection and receipt.
 
 An unavailable remote backup never undoes a locally committed write or creates
 a second authority. FTS is rebuilt from valid active documents at startup.
-Audit and idempotency state must be included in machine snapshots. A crash
-between the Git commit and SQLite receipt can leave a durable content change
-without an MCP receipt; production hardening must add an operation journal and
-startup reconciliation. Multiple gateway processes against one bundle are not
-supported until a dedicated mutation coordinator exists.
+Audit and idempotency state must be preserved alongside the bundle when
+restoring a host. A crash between the Git commit and SQLite receipt can leave
+a durable content change without an MCP receipt; production hardening must add
+an operation journal and startup reconciliation. Multiple gateway processes
+against one bundle are not supported until a dedicated mutation coordinator
+exists.
 
 ## Production hardening still required
 
 - terminate TLS and apply network policy;
 - store `KB_ACCESS_TOKEN` in a deployment secret manager and document rotation;
 - replace inline best-effort pushes with a supervised retry worker and alerts;
-- add encrypted daily/weekly/monthly snapshots plus restore drills;
 - add an operation journal to reconcile the narrow crash window between a Git
   commit and its SQLite receipt;
 - add rate limits, metrics, structured logging, secret scanning, and load tests;

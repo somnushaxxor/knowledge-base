@@ -17,6 +17,7 @@ REQUIRED_ENV = (
     "KB_MCP_PATH",
     "KB_LOG_LEVEL",
     "KB_PUSH_AFTER_WRITE",
+    "KB_REQUIRE_SECTIONS",
     "KB_GIT_REMOTE",
     "KB_LOCAL_ACTOR",
 )
@@ -59,6 +60,7 @@ def test_selected_token_mode_requires_access_token(
         "KB_MCP_PATH": "/mcp",
         "KB_LOG_LEVEL": "INFO",
         "KB_PUSH_AFTER_WRITE": "false",
+        "KB_REQUIRE_SECTIONS": "true",
         "KB_GIT_REMOTE": "origin",
     }
     for name, value in values.items():

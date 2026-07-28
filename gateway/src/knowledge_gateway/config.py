@@ -39,15 +39,15 @@ class Settings:
     log_level: str
     push_after_write: bool
     git_remote: str
+    require_sections: bool
     access_token: str | None = None
-    snapshot_status_path: Path | None = None
     local_actor: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
-        snapshot = os.getenv("KB_SNAPSHOT_STATUS_PATH")
         auth_mode = _required_env("KB_AUTH_MODE").lower()
         push_after_write = _required_env_bool("KB_PUSH_AFTER_WRITE")
+        require_sections = _required_env_bool("KB_REQUIRE_SECTIONS")
         try:
             port = int(_required_env("KB_PORT"))
         except ValueError as exc:
@@ -64,8 +64,8 @@ class Settings:
             log_level=_required_env("KB_LOG_LEVEL").upper(),
             push_after_write=push_after_write,
             git_remote=_required_env("KB_GIT_REMOTE"),
+            require_sections=require_sections,
             access_token=os.getenv("KB_ACCESS_TOKEN"),
-            snapshot_status_path=Path(snapshot) if snapshot else None,
             local_actor=os.getenv("KB_LOCAL_ACTOR"),
         )
 
