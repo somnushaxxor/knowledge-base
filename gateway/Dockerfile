@@ -18,10 +18,10 @@ COPY gateway/src /app/gateway/src
 
 RUN python -m pip install /app/gateway
 
-RUN groupadd --system gateway \
-    && useradd --system --gid gateway --home-dir /app gateway \
+RUN groupadd --gid 1000 gateway \
+    && useradd --uid 1000 --gid gateway --home-dir /app --shell /usr/sbin/nologin gateway \
     && mkdir -p /app/config /data/bundle /data/state \
-    && chown -R gateway:gateway /data
+    && chown -R gateway:gateway /app /data
 
 USER gateway
 

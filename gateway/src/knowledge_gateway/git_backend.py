@@ -53,6 +53,16 @@ class GitBackend:
                 self._run("init")
         self._run("config", "user.name", "Knowledge Gateway")
         self._run("config", "user.email", "gateway@localhost")
+        # Allow Git operations when the process uid matches the bind-mounted owner
+        # but /etc/passwd naming or mount metadata would otherwise trip safe.directory.
+        self._run(
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            str(self.bundle_path.resolve()),
+            check=False,
+        )
 
     def head(self) -> str | None:
         result = self._run("rev-parse", "HEAD", check=False)
