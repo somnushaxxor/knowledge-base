@@ -209,3 +209,77 @@ generated: false
     assert "tags" not in document.metadata
     with pytest.raises(ValidationError, match="document does not satisfy"):
         validate_document("notes/navigation.md", content, taxonomy)
+
+
+def test_search_ors_tokens_so_synonyms_do_not_kill_recall(
+    service: KnowledgeGateway, actor: Actor
+) -> None:
+    russian = """---
+type: Note
+title: Nikita
+description: Partner profile.
+status: active
+tags:
+  - people
+generated: false
+---
+
+## Summary
+
+День рождения Никиты — 23 мая.
+
+## Details
+
+Partner notes.
+
+## Relationships
+
+See [another note](/notes/another.md).
+"""
+    english = """---
+type: Note
+title: Anya
+description: Friend profile.
+status: active
+tags:
+  - people
+generated: false
+---
+
+## Summary
+
+Birthday: 19 July.
+
+## Details
+
+Friend notes.
+
+## Relationships
+
+See [another note](/notes/another.md).
+"""
+    service.upsert(
+        actor,
+        "test",
+        path="notes/nikita.md",
+        content=russian,
+        idempotency_key="create-nikita",
+        reason="Create Russian birthday note",
+        create_only=True,
+    )
+    service.upsert(
+        actor,
+        "test",
+        path="notes/anya.md",
+        content=english,
+        idempotency_key="create-anya",
+        reason="Create English birthday note",
+        create_only=True,
+    )
+
+    found = service.search(actor, "test", "Никита день рождения birthday")
+    paths = [result["path"] for result in found["results"]]
+
+    assert "notes/nikita.md" in paths
+    assert "notes/anya.md" in paths
+    assert paths[0] == "notes/nikita.md"

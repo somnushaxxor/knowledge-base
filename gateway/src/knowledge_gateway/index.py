@@ -131,6 +131,19 @@ class GatewayIndex:
             row = connection.execute("SELECT count(*) AS count FROM documents").fetchone()
         return int(row["count"])
 
+    @staticmethod
+    def build_match_query(query: str) -> str:
+        """Build an FTS5 MATCH expression from a free-text query.
+
+        Tokens are joined with OR so synonym-style agent queries still recall
+        documents that match only a subset of the terms. BM25 keeps docs that
+        hit more tokens ranked higher. Each token is phrase-quoted so FTS
+        operators and punctuation are treated as literals.
+        """
+        tokens = [token for token in query.split() if token]
+        escaped_tokens = [token.replace('"', '""') for token in tokens]
+        return " OR ".join(f'"{token}"' for token in escaped_tokens)
+
     def search(
         self,
         query: str,
@@ -140,9 +153,7 @@ class GatewayIndex:
         status: str | None,
         tags: list[str] | None,
     ) -> list[dict[str, object]]:
-        tokens = [token for token in query.split() if token]
-        escaped_tokens = [token.replace('"', '""') for token in tokens]
-        match_query = " ".join(f'"{token}"' for token in escaped_tokens)
+        match_query = self.build_match_query(query)
         clauses = []
         parameters: list[object] = []
         if document_type:

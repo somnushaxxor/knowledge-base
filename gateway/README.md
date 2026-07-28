@@ -14,7 +14,7 @@ environment.
 | Tool | Behavior |
 |---|---|
 | `kb_overview` | Bundle scope, taxonomy, health, document count, and Git head |
-| `kb_search` | SQLite FTS5 content search with type, status, and tag filters |
+| `kb_search` | SQLite FTS5 content search (OR across tokens; BM25 rank) with type, status, and tag filters |
 | `kb_get` | Complete Markdown, parsed metadata, and SHA-256 revision |
 | `kb_upsert` | Create or replace with validation, idempotency, and concurrency checks |
 | `kb_archive` | Move under `archive/` |
