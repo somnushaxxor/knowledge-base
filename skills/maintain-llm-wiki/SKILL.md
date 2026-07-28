@@ -80,7 +80,7 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
 
 ## Check backup
 
-Call `kb_backup_status`. Report the last durable live revision, last GitHub commit, backup lag, latest independent snapshot, and any failed restore check. Never infer backup health merely because a local commit exists.
+Call `kb_backup_status`. Report the last durable live revision, last GitHub commit, backup lag, and any push failure. Never infer backup health merely because a local commit exists.
 
 ## Gateway unavailable
 

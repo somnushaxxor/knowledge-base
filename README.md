@@ -95,5 +95,5 @@ CLAUDE.md        neutral Claude Code source-repository adapter
 
 The standard and agent kit are usable now. The gateway is a tested reference
 alpha; its README lists the remaining production-hardening work. The live
-bundle, its Git history, snapshots, runtime configuration, and credentials must
+bundle, its Git history, runtime configuration, and credentials must
 remain outside this repository.

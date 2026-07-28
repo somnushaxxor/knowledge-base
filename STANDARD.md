@@ -83,7 +83,7 @@ The gateway exposes a small MCP tool surface:
 | `kb_archive` | Move a document to the archive without destroying history |
 | `kb_history` | Inspect revisions, provenance, and change history |
 | `kb_validate` | Validate a proposed document or the whole bundle |
-| `kb_backup_status` | Report GitHub and snapshot recovery points and backup lag |
+| `kb_backup_status` | Report GitHub recovery points and backup lag |
 
 Every MCP request requires the configured bearer token. Every mutation also
 requires:
@@ -205,13 +205,6 @@ This agent-kit repository must never receive live or backup knowledge payloads.
 - The backup repository must be private, separate from this agent-kit
   repository, and protected with strong account security.
 
-### Independent backup
-
-- Create an encrypted daily snapshot to a provider or object store separate from GitHub.
-- Retain daily, weekly, and monthly recovery points according to storage budget.
-- Keep encryption keys outside the live host.
-- Perform and record a restore drill at least quarterly.
-
 A backup is considered valid only after an automated restore can reconstruct
 the OKF bundle and pass bundle validation.
 
@@ -247,9 +240,7 @@ Runtime configuration is external to Git:
 
 - gateway URL;
 - the single bearer token;
-- encryption keys;
-- GitHub deployment credentials;
-- snapshot credentials.
+- GitHub deployment credentials.
 
 Commit only examples or variable names, never live secrets.
 
@@ -271,7 +262,7 @@ Commit only examples or variable names, never live secrets.
 - Redact secrets before persistence and validate documents server-side.
 - Record mutations with the fixed actor `single-user`, timestamp, previous
   revision, and reason.
-- Back up encrypted data.
+- Keep the private Git backup repository private and recoverable.
 
 This pre-shared-token profile deliberately does not implement the interactive
 OAuth discovery and authorization-server flow from the MCP authorization
@@ -291,5 +282,4 @@ The single-user system is acceptable when:
 5. an unavailable GitHub does not create a second authority;
 6. backup lag and the last recovery point are observable;
 7. a clean machine can restore the bundle from the separate Git backup and pass validation;
-8. a quarterly snapshot restore succeeds;
-9. Codex, Claude Code, and Cursor load the same maintenance skill.
+8. Codex, Claude Code, and Cursor load the same maintenance skill.
