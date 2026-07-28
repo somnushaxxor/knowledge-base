@@ -43,7 +43,6 @@ class KnowledgeGateway:
             settings.bundle_path,
             settings.state_path,
             settings.git_remote,
-            settings.push_after_write,
         )
         self._initialization_lock = threading.Lock()
         self._ready = False
@@ -72,6 +71,8 @@ class KnowledgeGateway:
             "taxonomy": {
                 name: {
                     "folder": entry.folder,
+                    "filename": entry.filename,
+                    "tags_required": entry.tags_required,
                     "sections": list(entry.sections),
                 }
                 for name, entry in self.taxonomy.items()
@@ -157,12 +158,7 @@ class KnowledgeGateway:
         replay = self._idempotent_replay(actor, idempotency_key, request_hash)
         if replay is not None:
             return replay
-        document = validate_document(
-            normalized,
-            content,
-            self.taxonomy,
-            require_sections=self.settings.require_sections,
-        )
+        document = validate_document(normalized, content, self.taxonomy)
 
         with self._mutation_lock():
             replay = self._idempotent_replay(actor, idempotency_key, request_hash)
@@ -188,34 +184,17 @@ class KnowledgeGateway:
                 raise ConflictError("expected_revision must be omitted when creating")
 
             self._atomic_write(target, content)
-            try:
-                commit = self.git.commit(
-                    [normalized],
-                    operation="upsert",
-                    actor_id=actor.actor_id,
-                    reason=reason,
-                    delegating_principal=None,
-                )
-            except Exception:
-                self.git.unstage([normalized])
-                if previous_content is None:
-                    target.unlink(missing_ok=True)
-                    self._remove_empty_parents(target.parent)
-                else:
-                    self._atomic_write(target, previous_content)
-                raise
             accepted_at = now()
             revision = revision_for(content)
             self.index.replace_document(
                 self._index_row(normalized, revision, document, accepted_at)
             )
-            if not self.settings.push_after_write:
-                self.git.mark_pending()
+            self.git.mark_pending()
             backup = self.git.backup_status()["status"]
             response: dict[str, object] = {
                 "path": normalized,
                 "revision": revision,
-                "commit": commit,
+                "commit": None,
                 "backup": backup,
                 "accepted_at": accepted_at,
                 "idempotent_replay": False,
@@ -234,7 +213,7 @@ class KnowledgeGateway:
                     "delegating_principal": None,
                     "previous_revision": previous_revision,
                     "revision": revision,
-                    "commit_hash": commit,
+                    "commit_hash": "",
                     "reason": reason,
                     "accepted_at": accepted_at,
                 },
@@ -288,30 +267,15 @@ class KnowledgeGateway:
             archived_target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(target, archived_target)
             self._remove_empty_parents(target.parent)
-            try:
-                commit = self.git.commit(
-                    [normalized, archived_path],
-                    operation="archive",
-                    actor_id=actor.actor_id,
-                    reason=reason,
-                    delegating_principal=None,
-                )
-            except Exception:
-                self.git.unstage([normalized, archived_path])
-                target.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(archived_target, target)
-                self._remove_empty_parents(archived_target.parent)
-                raise
             accepted_at = now()
             self.index.remove_document(normalized)
-            if not self.settings.push_after_write:
-                self.git.mark_pending()
+            self.git.mark_pending()
             backup = self.git.backup_status()["status"]
             response: dict[str, object] = {
                 "path": normalized,
                 "archived_path": archived_path,
                 "revision": current_revision,
-                "commit": commit,
+                "commit": None,
                 "backup": backup,
                 "accepted_at": accepted_at,
                 "idempotent_replay": False,
@@ -330,7 +294,7 @@ class KnowledgeGateway:
                     "delegating_principal": None,
                     "previous_revision": current_revision,
                     "revision": current_revision,
-                    "commit_hash": commit,
+                    "commit_hash": "",
                     "reason": reason,
                     "accepted_at": accepted_at,
                 },
@@ -357,12 +321,7 @@ class KnowledgeGateway:
     ) -> dict[str, object]:
         self._authorize(scope)
         try:
-            validate_document(
-                path,
-                content,
-                self.taxonomy,
-                require_sections=self.settings.require_sections,
-            )
+            validate_document(path, content, self.taxonomy)
         except ValidationError as exc:
             return {"valid": False, "issue_count": len(exc.issues), "issues": exc.issues}
         return {"valid": True, "issue_count": 0, "issues": []}
@@ -379,7 +338,6 @@ class KnowledgeGateway:
                     validation_path,
                     file_path.read_text(encoding="utf-8"),
                     self.taxonomy,
-                    require_sections=self.settings.require_sections,
                 )
             except (OSError, UnicodeError, ValidationError) as exc:
                 if isinstance(exc, ValidationError) and exc.issues:
@@ -394,7 +352,28 @@ class KnowledgeGateway:
     def backup_status(self, actor: Actor, scope: str) -> dict[str, object]:
         self._authorize(scope)
         self.ensure_ready()
-        return {"scope": scope, "git": self.git.backup_status()}
+        return {
+            "scope": scope,
+            "backup_interval_hours": self.settings.backup_interval_hours,
+            "git": self.git.backup_status(),
+        }
+
+    def run_backup(self) -> dict[str, object]:
+        """Commit dirty bundle files and best-effort push to the private remote."""
+        self.ensure_ready()
+        with self._mutation_lock():
+            timestamp = now()
+            dirty_before = self.git.has_uncommitted_changes()
+            commit = self.git.create_backup_commit(timestamp)
+            pushed = self.git.try_push(commit)
+            status = self.git.backup_status()
+            return {
+                "timestamp": timestamp,
+                "committed": dirty_before and commit is not None,
+                "commit": commit,
+                "pushed": pushed,
+                "status": status["status"],
+            }
 
     def rebuild_index(self) -> None:
         self.index.clear_documents()
@@ -404,14 +383,7 @@ class KnowledgeGateway:
                 continue
             try:
                 content = file_path.read_text(encoding="utf-8")
-                # Index existing bundles even when section headings still drift
-                # from taxonomy; writes keep full require_sections=True checks.
-                document = validate_document(
-                    relative,
-                    content,
-                    self.taxonomy,
-                    require_sections=False,
-                )
+                document = validate_document(relative, content, self.taxonomy)
             except (OSError, UnicodeError, ValidationError):
                 continue
             self.index.replace_document(
@@ -451,8 +423,8 @@ class KnowledgeGateway:
 
     @contextmanager
     def _mutation_lock(self) -> Iterator[None]:
-        # Git has one shared index. A repository-wide lock prevents two writes
-        # to different documents from racing while staging and committing.
+        # Repository-wide lock serializes live writes against each other and
+        # against the periodic backup commit/push.
         lock_path = self.settings.state_path / "locks" / "mutation.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a", encoding="utf-8") as lock:
@@ -504,7 +476,7 @@ class KnowledgeGateway:
             "description": str(metadata["description"]),
             "type": str(metadata["type"]),
             "status": str(metadata["status"]),
-            "tags_json": json.dumps(metadata["tags"], ensure_ascii=False),
+            "tags_json": json.dumps(metadata.get("tags", []), ensure_ascii=False),
             "body": document.body,
             "updated_at": accepted_at,
         }

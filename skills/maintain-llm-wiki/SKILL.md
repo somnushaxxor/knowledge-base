@@ -58,7 +58,7 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
    with values required by the deployment taxonomy.
 7. Call `kb_validate`.
 8. Call `kb_upsert` with an idempotency key and `expected_revision`, or an explicit create-only condition.
-9. Keep the returned path, revision, commit, and backup state in the working context.
+9. Keep the returned path, revision, and backup state in the working context.
 10. Report success only after receiving the receipt. If backup is pending, distinguish “saved live” from “backed up.”
 
 ## Curate
@@ -80,7 +80,9 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
 
 ## Check backup
 
-Call `kb_backup_status`. Report the last durable live revision, last GitHub commit, backup lag, and any push failure. Never infer backup health merely because a local commit exists.
+Call `kb_backup_status`. Report the configured backup interval, dirty state,
+last backup commit, last pushed commit, backup lag, and any push failure. Never
+infer backup health merely because a live write succeeded.
 
 ## Gateway unavailable
 

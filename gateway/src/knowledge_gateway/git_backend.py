@@ -1,4 +1,4 @@
-"""Local Git history and best-effort remote backup operations."""
+"""Local Git snapshot backups and best-effort remote push."""
 
 from __future__ import annotations
 
@@ -17,12 +17,10 @@ class GitBackend:
         bundle_path: Path,
         state_path: Path,
         remote: str = "origin",
-        push_after_write: bool = False,
     ):
         self.bundle_path = bundle_path
         self.state_path = state_path
         self.remote = remote
-        self.push_after_write = push_after_write
         self.backup_state_path = state_path / "backup.json"
 
     def _run(
@@ -68,53 +66,27 @@ class GitBackend:
         result = self._run("rev-parse", "HEAD", check=False)
         return result.stdout.strip() if result.returncode == 0 else None
 
-    def commit(
-        self,
-        paths: list[str],
-        *,
-        operation: str,
-        actor_id: str,
-        reason: str,
-        delegating_principal: str | None,
-    ) -> str:
-        self._run("add", "--", *paths)
+    def has_uncommitted_changes(self) -> bool:
+        result = self._run("status", "--porcelain", check=False)
+        return bool(result.stdout.strip())
+
+    def create_backup_commit(self, timestamp: str) -> str | None:
+        """Stage the whole bundle and create one backup commit if anything changed."""
+        self._run("add", "--all")
         staged = self._run("diff", "--cached", "--quiet", check=False)
         if staged.returncode == 0:
-            head = self.head()
-            if head is None:
-                raise GatewayError("mutation produced no Git change")
-            return head
+            return self.head()
 
-        subject = f"kb({operation}): {', '.join(paths)}"
-        body = [
-            subject,
-            "",
-            f"Actor: {actor_id}",
-            f"Reason: {reason}",
-        ]
-        if delegating_principal:
-            body.append(f"Delegating-Principal: {delegating_principal}")
-        self._run("commit", "--message", "\n".join(body))
+        message = f"backup {timestamp}"
+        self._run("commit", "--message", message)
         commit = self.head()
         if commit is None:
-            raise GatewayError("Git commit was not created")
-        if self.push_after_write:
-            self.try_push(commit)
+            raise GatewayError("Git backup commit was not created")
+        state = self._read_backup_state()
+        state["last_backup_at"] = timestamp
+        state["last_backup_commit"] = commit
+        self._write_backup_state(state)
         return commit
-
-    def unstage(self, paths: list[str]) -> None:
-        """Best-effort cleanup after a mutation fails before its Git commit."""
-        if self.head() is None:
-            self._run(
-                "rm",
-                "--cached",
-                "--ignore-unmatch",
-                "--",
-                *paths,
-                check=False,
-            )
-        else:
-            self._run("reset", "--quiet", "HEAD", "--", *paths, check=False)
 
     def has_remote(self) -> bool:
         result = self._run("remote", "get-url", self.remote, check=False)
@@ -157,14 +129,22 @@ class GitBackend:
 
     def backup_status(self) -> dict[str, object]:
         head = self.head()
+        dirty = self.has_uncommitted_changes()
         state = self._read_backup_state()
-        synced = head is not None and state.get("last_pushed_commit") == head
-        if head and not synced:
+        synced = (
+            not dirty
+            and head is not None
+            and state.get("last_pushed_commit") == head
+        )
+        if dirty or (head and not synced):
             self.mark_pending()
             state = self._read_backup_state()
         return {
             "remote": self.remote if self.has_remote() else None,
+            "dirty": dirty,
             "local_commit": head,
+            "last_backup_commit": state.get("last_backup_commit"),
+            "last_backup_at": state.get("last_backup_at"),
             "last_pushed_commit": state.get("last_pushed_commit"),
             "last_pushed_at": state.get("last_pushed_at"),
             "pending_since": state.get("pending_since"),

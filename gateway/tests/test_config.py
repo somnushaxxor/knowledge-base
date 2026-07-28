@@ -16,8 +16,7 @@ REQUIRED_ENV = (
     "KB_PORT",
     "KB_MCP_PATH",
     "KB_LOG_LEVEL",
-    "KB_PUSH_AFTER_WRITE",
-    "KB_REQUIRE_SECTIONS",
+    "KB_BACKUP_INTERVAL_HOURS",
     "KB_GIT_REMOTE",
     "KB_LOCAL_ACTOR",
 )
@@ -59,8 +58,7 @@ def test_selected_token_mode_requires_access_token(
         "KB_PORT": "8000",
         "KB_MCP_PATH": "/mcp",
         "KB_LOG_LEVEL": "INFO",
-        "KB_PUSH_AFTER_WRITE": "false",
-        "KB_REQUIRE_SECTIONS": "true",
+        "KB_BACKUP_INTERVAL_HOURS": "6",
         "KB_GIT_REMOTE": "origin",
     }
     for name, value in values.items():
@@ -89,6 +87,15 @@ def test_selected_token_mode_rejects_short_token(settings: Settings) -> None:
         match="KB_ACCESS_TOKEN must contain at least 32 characters",
     ):
         token_settings.validate()
+
+
+def test_backup_interval_must_be_non_negative(settings: Settings) -> None:
+    bad = Settings(**{**settings.__dict__, "backup_interval_hours": -1})
+    with pytest.raises(
+        ConfigurationError,
+        match="KB_BACKUP_INTERVAL_HOURS must be >= 0",
+    ):
+        bad.validate()
 
 
 def test_runtime_data_cannot_live_in_source_repository(

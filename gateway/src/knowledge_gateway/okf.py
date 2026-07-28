@@ -30,10 +30,22 @@ def load_taxonomy(path: Path) -> dict[str, TaxonomyType]:
         if not isinstance(item, dict):
             raise ConfigurationError("each taxonomy type must be an object")
         try:
+            filename = item.get("filename")
+            if filename is not None:
+                filename = str(filename)
+                if not filename or PurePosixPath(filename).name != filename:
+                    raise ConfigurationError(
+                        "taxonomy filename must be a non-empty basename"
+                    )
+            tags_required = item.get("tags_required", True)
+            if not isinstance(tags_required, bool):
+                raise ConfigurationError("taxonomy tags_required must be a boolean")
             entry = TaxonomyType(
                 name=str(item["type"]),
                 folder=str(item["folder"]).strip("/"),
                 sections=tuple(str(section) for section in item.get("sections", [])),
+                filename=filename,
+                tags_required=tags_required,
             )
         except KeyError as exc:
             raise ConfigurationError(f"taxonomy type lacks {exc.args[0]}") from exc
@@ -72,8 +84,6 @@ def validate_document(
     path: str,
     content: str,
     taxonomy: dict[str, TaxonomyType],
-    *,
-    require_sections: bool = True,
 ) -> ParsedDocument:
     normalized_path = normalize_document_path(path)
     issues: list[dict[str, str]] = []
@@ -82,19 +92,22 @@ def validate_document(
     except ValidationError as exc:
         raise ValidationError(str(exc), [{"path": normalized_path, "message": str(exc)}]) from exc
 
-    for key in REQUIRED_METADATA:
+    document_type = document.metadata.get("type")
+    taxonomy_type = taxonomy.get(str(document_type))
+    required_metadata = REQUIRED_METADATA
+    if taxonomy_type is not None and not taxonomy_type.tags_required:
+        required_metadata = tuple(key for key in REQUIRED_METADATA if key != "tags")
+    for key in required_metadata:
         if key not in document.metadata:
             issues.append({"path": normalized_path, "message": f"missing metadata: {key}"})
 
-    document_type = document.metadata.get("type")
-    taxonomy_type = taxonomy.get(str(document_type))
     if taxonomy_type is None:
         issues.append(
             {"path": normalized_path, "message": f"unknown document type: {document_type}"}
         )
     else:
         top_folder = PurePosixPath(normalized_path).parts[0]
-        if top_folder != taxonomy_type.folder:
+        if taxonomy_type.folder != "**" and top_folder != taxonomy_type.folder:
             issues.append(
                 {
                     "path": normalized_path,
@@ -104,17 +117,19 @@ def validate_document(
                     ),
                 }
             )
-        if require_sections:
-            headings = set(re.findall(r"^##\s+(.+?)\s*$", document.body, re.MULTILINE))
-            for section in taxonomy_type.sections:
-                if section not in headings:
-                    issues.append(
-                        {
-                            "path": normalized_path,
-                            "message": f"missing required section: {section}",
-                        }
-                    )
-
+        if (
+            taxonomy_type.filename is not None
+            and PurePosixPath(normalized_path).name != taxonomy_type.filename
+        ):
+            issues.append(
+                {
+                    "path": normalized_path,
+                    "message": (
+                        f"type {taxonomy_type.name} must use filename "
+                        f"{taxonomy_type.filename}"
+                    ),
+                }
+            )
     title = document.metadata.get("title")
     description = document.metadata.get("description")
     tags = document.metadata.get("tags")
@@ -176,4 +191,3 @@ def find_markdown_files(bundle_path: Path) -> list[Path]:
         for path in bundle_path.rglob("*.md")
         if ".git" not in path.parts and not any(part.startswith(".") for part in path.parts)
     )
-

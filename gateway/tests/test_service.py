@@ -4,8 +4,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from knowledge_gateway.errors import AuthorizationError, ConflictError
+from knowledge_gateway.errors import AuthorizationError, ConflictError, ValidationError
 from knowledge_gateway.models import Actor
+from knowledge_gateway.okf import load_taxonomy, validate_document
 from knowledge_gateway.service import KnowledgeGateway
 
 
@@ -29,12 +30,13 @@ def test_create_search_get_and_idempotent_replay(
     receipt = create_note(service, actor, note)
 
     assert receipt["revision"].startswith("sha256:")
-    assert receipt["commit"]
+    assert receipt["commit"] is None
     assert receipt["backup"] == "pending"
     assert receipt["idempotent_replay"] is False
+    assert service.git.has_uncommitted_changes()
 
     replay = create_note(service, actor, note)
-    assert replay["commit"] == receipt["commit"]
+    assert replay["commit"] is None
     assert replay["idempotent_replay"] is True
 
     found = service.search(actor, "test", "serializes writes")
@@ -45,6 +47,23 @@ def test_create_search_get_and_idempotent_replay(
     assert loaded["revision"] == receipt["revision"]
     assert loaded["metadata"]["type"] == "Note"
     assert loaded["content"] == note
+
+
+def test_periodic_backup_commits_dirty_changes(
+    service: KnowledgeGateway, actor: Actor, note: str
+) -> None:
+    create_note(service, actor, note)
+    assert service.git.head() is None
+    assert service.git.has_uncommitted_changes()
+
+    result = service.run_backup()
+
+    assert result["committed"] is True
+    assert result["commit"]
+    assert not service.git.has_uncommitted_changes()
+    assert service.git.head() == result["commit"]
+    log = service.git._run("log", "-1", "--pretty=%s")
+    assert log.stdout.strip().startswith("backup ")
 
 
 def test_update_requires_current_revision(
@@ -133,31 +152,60 @@ def test_archive_preserves_receipt_and_history(
 def test_validation_and_scope_boundary(
     service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:
-    invalid = note.replace("## Relationships", "## Missing")
+    invalid = note.replace("/notes/another.md", "notes/another.md")
     result = service.validate_proposed(
         actor, "test", "notes/fastmcp-gateway.md", invalid
     )
     assert result["valid"] is False
-    assert any("Relationships" in issue["message"] for issue in result["issues"])
+    assert any("bundle-absolute" in issue["message"] for issue in result["issues"])
 
     with pytest.raises(AuthorizationError):
         service.overview(actor, "another-scope")
 
 
-def test_git_failure_rolls_back_unaccepted_file(
-    service: KnowledgeGateway,
-    actor: Actor,
-    note: str,
-    monkeypatch: pytest.MonkeyPatch,
+def test_taxonomy_sections_are_guidance(
+    service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:
-    service.ensure_ready()
+    content = note.replace("## Summary", "## Context").replace(
+        "## Relationships", "## Links"
+    )
 
-    def fail_commit(*args, **kwargs):
-        raise RuntimeError("simulated Git failure")
+    result = service.validate_proposed(
+        actor, "test", "notes/fastmcp-gateway.md", content
+    )
 
-    monkeypatch.setattr(service.git, "commit", fail_commit)
-    with pytest.raises(RuntimeError, match="simulated Git failure"):
-        create_note(service, actor, note)
+    assert result == {"valid": True, "issue_count": 0, "issues": []}
 
-    target = service.settings.bundle_path / "notes" / "fastmcp-gateway.md"
-    assert not target.exists()
+
+def test_taxonomy_supports_wildcard_index_without_tags(tmp_path) -> None:
+    taxonomy_path = tmp_path / "taxonomy.yaml"
+    taxonomy_path.write_text(
+        """\
+version: 1
+types:
+  - type: index
+    folder: "**"
+    filename: index.md
+    tags_required: false
+    sections: []
+""",
+        encoding="utf-8",
+    )
+    taxonomy = load_taxonomy(taxonomy_path)
+    content = """\
+---
+type: index
+title: Notes
+description: Navigation for notes.
+status: stable
+generated: false
+---
+
+# Notes
+"""
+
+    document = validate_document("notes/index.md", content, taxonomy)
+
+    assert "tags" not in document.metadata
+    with pytest.raises(ValidationError, match="document does not satisfy"):
+        validate_document("notes/navigation.md", content, taxonomy)

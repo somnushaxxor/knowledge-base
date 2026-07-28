@@ -17,14 +17,16 @@ environment.
 | `kb_search` | SQLite FTS5 content search with type, status, and tag filters |
 | `kb_get` | Complete Markdown, parsed metadata, and SHA-256 revision |
 | `kb_upsert` | Create or replace with validation, idempotency, and concurrency checks |
-| `kb_archive` | Git-tracked move under `archive/` |
-| `kb_history` | Gateway audit receipts and local Git history |
+| `kb_archive` | Move under `archive/` |
+| `kb_history` | Gateway audit receipts and backup Git history |
 | `kb_validate` | Proposed-document or whole-bundle validation |
-| `kb_backup_status` | Local and remote Git backup state |
+| `kb_backup_status` | Scheduled Git backup state and lag |
 
-Every mutation is serialized with an OS file lock, written atomically, and
-committed to the bundle's local Git repository. A new document requires
-`create_only=true`; an existing document requires its exact
+Every mutation is serialized with an OS file lock and written atomically to the
+bundle. Git commits are not created on write. A background scheduler controlled
+by `KB_BACKUP_INTERVAL_HOURS` periodically commits dirty changes as
+`backup <timestamp>` and best-effort pushes to the private remote. A new
+document requires `create_only=true`; an existing document requires its exact
 `expected_revision`. Reusing an idempotency key with a different request is a
 conflict.
 
@@ -48,7 +50,7 @@ export KB_HOST=127.0.0.1
 export KB_PORT=8000
 export KB_MCP_PATH=/mcp
 export KB_LOG_LEVEL=INFO
-export KB_PUSH_AFTER_WRITE=false
+export KB_BACKUP_INTERVAL_HOURS=6
 export KB_GIT_REMOTE=origin
 
 knowledge-gateway
@@ -136,9 +138,11 @@ off-host backup separately:
 git -C /data/bundle remote add origin <private-backup-repository>
 ```
 
-`KB_PUSH_AFTER_WRITE=true` performs a best-effort push after each commit. Push
-failure leaves the accepted local write authoritative and reports the backup
-as pending.
+`KB_BACKUP_INTERVAL_HOURS` (required) sets how often the gateway commits dirty
+bundle files and best-effort pushes to that remote. Example: `6` means every
+six hours; `0.5` means every thirty minutes; `0` disables the scheduler.
+Live writes remain authoritative even when a push fails and report
+`backup: pending`.
 
 ## Runtime architecture and failure boundaries
 
@@ -153,29 +157,26 @@ Runtime data is deliberately split from source code:
     └── locks/mutation.lock     cross-process mutation serialization
 ```
 
-The repository-wide mutation lock is intentional: Git has one shared index, so
-per-document locks alone could let one mutation enter another mutation's
-commit. A write therefore authenticates the single user, checks
+The repository-wide mutation lock serializes live writes against each other and
+against the periodic backup. A write authenticates the single user, checks
 idempotency, validates the complete document, acquires the mutation lock,
-compares the current revision, atomically replaces the file, creates the local
-Git commit, and then records the FTS projection and receipt.
+compares the current revision, atomically replaces the file, and then records
+the FTS projection and receipt. Git commit and push happen later on the
+configured schedule.
 
-An unavailable remote backup never undoes a locally committed write or creates
+An unavailable remote backup never undoes a locally accepted write or creates
 a second authority. FTS is rebuilt from valid active documents at startup.
 Audit and idempotency state must be preserved alongside the bundle when
-restoring a host. A crash between the Git commit and SQLite receipt can leave
-a durable content change without an MCP receipt; production hardening must add
-an operation journal and startup reconciliation. Multiple gateway processes
-against one bundle are not supported until a dedicated mutation coordinator
-exists.
+restoring a host. Multiple gateway processes against one bundle are not
+supported until a dedicated mutation coordinator exists.
 
 ## Production hardening still required
 
 - terminate TLS and apply network policy;
 - store `KB_ACCESS_TOKEN` in a deployment secret manager and document rotation;
-- replace inline best-effort pushes with a supervised retry worker and alerts;
-- add an operation journal to reconcile the narrow crash window between a Git
-  commit and its SQLite receipt;
+- alert when backup lag exceeds `KB_BACKUP_INTERVAL_HOURS`;
+- add an operation journal to reconcile crash windows between file write and
+  SQLite receipt;
 - add rate limits, metrics, structured logging, secret scanning, and load tests;
 - keep a single gateway process per bundle until a dedicated mutation
   coordinator exists.

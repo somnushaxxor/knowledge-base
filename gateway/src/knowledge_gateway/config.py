@@ -16,14 +16,12 @@ def _required_env(name: str) -> str:
     return value.strip()
 
 
-def _required_env_bool(name: str) -> bool:
+def _required_env_number(name: str) -> float:
     value = _required_env(name)
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ConfigurationError(f"{name} must be a boolean, got {value!r}")
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ConfigurationError(f"{name} must be a number, got {value!r}") from exc
 
 
 @dataclass(frozen=True)
@@ -37,17 +35,15 @@ class Settings:
     port: int
     mcp_path: str
     log_level: str
-    push_after_write: bool
+    backup_interval_hours: float
     git_remote: str
-    require_sections: bool
     access_token: str | None = None
     local_actor: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
         auth_mode = _required_env("KB_AUTH_MODE").lower()
-        push_after_write = _required_env_bool("KB_PUSH_AFTER_WRITE")
-        require_sections = _required_env_bool("KB_REQUIRE_SECTIONS")
+        backup_interval_hours = _required_env_number("KB_BACKUP_INTERVAL_HOURS")
         try:
             port = int(_required_env("KB_PORT"))
         except ValueError as exc:
@@ -62,9 +58,8 @@ class Settings:
             port=port,
             mcp_path=_required_env("KB_MCP_PATH"),
             log_level=_required_env("KB_LOG_LEVEL").upper(),
-            push_after_write=push_after_write,
+            backup_interval_hours=backup_interval_hours,
             git_remote=_required_env("KB_GIT_REMOTE"),
-            require_sections=require_sections,
             access_token=os.getenv("KB_ACCESS_TOKEN"),
             local_actor=os.getenv("KB_LOCAL_ACTOR"),
         )
@@ -96,6 +91,8 @@ class Settings:
             )
         if not 1 <= self.port <= 65535:
             raise ConfigurationError("KB_PORT must be between 1 and 65535")
+        if self.backup_interval_hours < 0:
+            raise ConfigurationError("KB_BACKUP_INTERVAL_HOURS must be >= 0")
         if not self.mcp_path.startswith("/"):
             raise ConfigurationError("KB_MCP_PATH must begin with '/'")
         if self.bundle_path.resolve() == self.state_path.resolve():

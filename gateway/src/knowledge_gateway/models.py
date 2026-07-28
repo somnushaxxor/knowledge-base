@@ -17,6 +17,8 @@ class TaxonomyType:
     name: str
     folder: str
     sections: tuple[str, ...]
+    filename: str | None = None
+    tags_required: bool = True
 
 
 @dataclass(frozen=True)

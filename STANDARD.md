@@ -98,19 +98,22 @@ All authenticated calls use the fixed audit actor `single-user`. This profile
 does not distinguish which of the owner's clients used the shared token.
 
 The gateway verifies the bearer token and scope, performs validation, obtains a
-per-document lock, checks the expected revision, writes atomically, updates the
-search projection, and creates a local Git commit. It then returns:
+mutation lock, checks the expected revision, writes atomically, and updates the
+search projection. Live writes do not create Git commits. It then returns:
 
 ```json
 {
   "path": "concepts/example.md",
   "revision": "sha256:...",
-  "commit": "...",
+  "commit": null,
   "backup": "synced|pending",
   "accepted_at": "RFC3339 timestamp"
 }
 ```
 
+`commit` is `null` until a scheduled backup includes the change. `backup:
+pending` means the live write is durable on the gateway host but has not yet
+been committed and pushed to the private Git backup repository.
 On a conflict, the agent must read the new revision, merge semantically, and retry with a new idempotency key. Last-write-wins is prohibited.
 
 ## 5. Knowledge model
@@ -119,7 +122,7 @@ The gateway-managed bundle directory is one OKF v0.2 bundle. Its configured
 runtime path is external to this agent-kit repository.
 
 - Every knowledge document is Markdown with YAML frontmatter.
-- `type` is required by OKF; this profile also requires `title`, `description`, `status`, `tags`, and `generated`.
+- `type` is required by OKF; this profile also requires `title`, `description`, `status`, `tags`, and `generated`. A taxonomy type may make `tags` optional when tags add no retrieval value.
 - Claims copied or synthesized from external material include `sources`.
 - Internal links are bundle-relative and begin with `/`.
 - `index.md` provides navigation. `log.md` records significant changes newest first.
@@ -145,17 +148,24 @@ policy:
 types:
   - type: TypeName
     folder: folder-name
+    filename: optional-fixed-name.md
+    tags_required: true
     purpose: Human-readable guidance for agents and maintainers.
     sections:
-      - Required section
+      - Recommended section
 ```
 
 For every entry, `type` and `folder` are required. `purpose` is guidance for
-agents and maintainers. `sections` is an optional list of required level-two
-headings. A deployment should keep type names and top-level folders unique.
-The gateway enforces declared document types, their top-level folders, and
-required sections. The remaining policy keys document deployment policy for
-agents and maintainers.
+agents and maintainers. Use `folder: "**"` for a type allowed in any bundle
+folder. `filename` optionally restricts the type to one basename regardless of
+depth. `tags_required` defaults to `true`; set it to `false` only for a type
+whose documents do not benefit from tag-based retrieval. `sections` is an
+optional list of recommended level-two headings for agents creating or
+restructuring documents; the gateway does not reject other document structures.
+A deployment should keep type names and fixed top-level folders unique. The
+gateway enforces declared document types, folder and filename constraints, and
+metadata requirements. The remaining policy keys document deployment policy
+for agents and maintainers.
 
 Once a bundle contains knowledge, changing its taxonomy requires a durable
 decision and a migration plan. Adding undeclared types during ordinary capture
@@ -196,11 +206,18 @@ This agent-kit repository must never receive live or backup knowledge payloads.
 
 ### Git backup
 
-- The gateway creates a local commit for every accepted write or short atomic batch.
-- A background worker pushes immediately and retries with exponential backoff.
-- The default recovery-point objective for GitHub is five minutes.
-- `kb_backup_status` exposes the last local commit, last pushed commit, lag, and failure reason.
-- Backup lag above the objective triggers an alert but does not split the live authority.
+- Live accepted writes update OKF files and the gateway index only; they do not
+  create Git commits or push remotely.
+- A background scheduler wakes on the interval configured by
+  `KB_BACKUP_INTERVAL_HOURS` (required env; hours, fractional values allowed;
+  `0` disables the scheduler). The recommended default is `6`.
+- Each wake creates at most one local commit with message `backup <timestamp>`
+  if the working tree is dirty, then best-effort pushes to the private remote.
+- The recovery-point objective equals the configured backup interval.
+- `kb_backup_status` exposes dirty state, last backup commit, last pushed
+  commit, lag, failure reason, and the configured interval.
+- Backup lag above the objective triggers an alert but does not split the live
+  authority.
 - Force-pushes and destructive history rewrites are prohibited.
 - The backup repository must be private, separate from this agent-kit
   repository, and protected with strong account security.

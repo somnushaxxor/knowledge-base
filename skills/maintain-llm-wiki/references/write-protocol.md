@@ -23,8 +23,9 @@ Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_val
 
 ## Receipt semantics
 
-A receipt proves the live write is durable and includes a revision and local
-Git commit. `backup: pending` means the live write succeeded but the separate
+A receipt proves the live write is durable on the gateway host and includes a
+content revision. `commit` is `null` until a scheduled backup includes the
+change. `backup: pending` means the live write succeeded but the separate
 off-site Git backup has not caught up. Do not describe a pending backup as
 complete.
 

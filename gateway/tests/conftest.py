@@ -29,8 +29,7 @@ os.environ.update(
         "KB_PORT": "8000",
         "KB_MCP_PATH": "/mcp",
         "KB_LOG_LEVEL": "INFO",
-        "KB_PUSH_AFTER_WRITE": "false",
-        "KB_REQUIRE_SECTIONS": "true",
+        "KB_BACKUP_INTERVAL_HOURS": "0",
         "KB_GIT_REMOTE": "origin",
     }
 )
@@ -59,9 +58,8 @@ def settings(tmp_path: Path, taxonomy_path: Path) -> Settings:
         port=8000,
         mcp_path="/mcp",
         log_level="INFO",
-        push_after_write=False,
+        backup_interval_hours=0,
         git_remote="origin",
-        require_sections=True,
         local_actor="test-local",
     )
 

@@ -11,6 +11,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
 
 from .auth import SINGLE_USER_ACTOR_ID, SingleUserTokenVerifier
+from .backup_scheduler import BackupScheduler
 from .config import Settings
 from .errors import ConfigurationError, GatewayError
 from .models import Actor
@@ -49,6 +50,7 @@ def create_mcp(
     settings.validate()
     service = service or KnowledgeGateway(settings)
     service.ensure_ready()
+    BackupScheduler(service).start()
     mcp = FastMCP(
         name="Knowledge Gateway",
         instructions=(
@@ -121,7 +123,7 @@ def create_mcp(
         idempotency_key: str,
         reason: str,
     ) -> dict[str, object]:
-        """Move a current document under archive/ without destroying Git history."""
+        """Move a current document under archive/ without deleting content."""
         return await _call(
             service.archive,
             actor_from_request(settings),
