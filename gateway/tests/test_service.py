@@ -42,11 +42,73 @@ def test_create_search_get_and_idempotent_replay(
     found = service.search(actor, "test", "serializes writes")
     assert found["count"] == 1
     assert found["results"][0]["path"] == "notes/fastmcp-gateway.md"
+    assert "updated_at" in found["results"][0]
+    assert found["results"][0]["updated_at"]
 
     loaded = service.get(actor, "test", "notes/fastmcp-gateway.md")
     assert loaded["revision"] == receipt["revision"]
     assert loaded["metadata"]["type"] == "Note"
     assert loaded["content"] == note
+
+
+def test_search_exposes_updated_at_and_time_bounds(
+    service: KnowledgeGateway, actor: Actor, note: str
+) -> None:
+    create_note(service, actor, note)
+    older = note.replace("FastMCP Gateway", "Older Note").replace(
+        "A gateway implementation note.", "An older note."
+    )
+    service.upsert(
+        actor,
+        "test",
+        path="notes/older.md",
+        content=older,
+        idempotency_key="create-older",
+        reason="Create an older note",
+        create_only=True,
+    )
+    with service.index.connect() as connection:
+        connection.execute(
+            "UPDATE documents SET updated_at = ? WHERE path = ?",
+            ("2026-08-01T10:00:00+00:00", "notes/older.md"),
+        )
+        connection.execute(
+            "UPDATE documents SET updated_at = ? WHERE path = ?",
+            ("2026-08-10T12:00:00+00:00", "notes/fastmcp-gateway.md"),
+        )
+
+    recent = service.search(
+        actor,
+        "test",
+        "",
+        since="2026-08-09T00:00:00Z",
+        until="2026-08-11T00:00:00+00:00",
+    )
+    assert [item["path"] for item in recent["results"]] == [
+        "notes/fastmcp-gateway.md"
+    ]
+    assert recent["results"][0]["updated_at"] == "2026-08-10T12:00:00+00:00"
+
+    lexical = service.search(
+        actor,
+        "test",
+        "gateway",
+        since="2026-08-09",
+    )
+    assert lexical["count"] == 1
+    assert lexical["results"][0]["path"] == "notes/fastmcp-gateway.md"
+
+    with pytest.raises(ValidationError, match="ISO-8601"):
+        service.search(actor, "test", "", since="yesterday")
+
+    with pytest.raises(ValidationError, match="less than or equal"):
+        service.search(
+            actor,
+            "test",
+            "",
+            since="2026-08-11T00:00:00Z",
+            until="2026-08-10T00:00:00Z",
+        )
 
 
 def test_periodic_backup_commits_dirty_changes(

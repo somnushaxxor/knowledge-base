@@ -152,6 +152,8 @@ class GatewayIndex:
         document_type: str | None,
         status: str | None,
         tags: list[str] | None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> list[dict[str, object]]:
         match_query = self.build_match_query(query)
         clauses = []
@@ -167,13 +169,20 @@ class GatewayIndex:
                 "EXISTS (SELECT 1 FROM json_each(d.tags_json) WHERE json_each.value = ?)"
             )
             parameters.append(tag)
+        if since:
+            clauses.append("d.updated_at >= ?")
+            parameters.append(since)
+        if until:
+            clauses.append("d.updated_at <= ?")
+            parameters.append(until)
 
         if match_query:
             where = ["documents_fts MATCH ?", *clauses]
             parameters = [match_query, *parameters]
             sql = f"""
                 SELECT d.path, d.revision, d.title, d.description, d.type,
-                       d.status, d.tags_json, bm25(documents_fts) AS score,
+                       d.status, d.tags_json, d.updated_at,
+                       bm25(documents_fts) AS score,
                        snippet(documents_fts, 4, '', '', ' … ', 18) AS excerpt
                 FROM documents_fts
                 JOIN documents d ON d.path = documents_fts.path
@@ -185,7 +194,7 @@ class GatewayIndex:
             where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
             sql = f"""
                 SELECT d.path, d.revision, d.title, d.description, d.type,
-                       d.status, d.tags_json, 0.0 AS score,
+                       d.status, d.tags_json, d.updated_at, 0.0 AS score,
                        substr(d.body, 1, 240) AS excerpt
                 FROM documents d
                 {where_sql}

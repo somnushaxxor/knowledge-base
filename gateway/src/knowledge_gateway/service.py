@@ -93,6 +93,8 @@ class KnowledgeGateway:
         document_type: str | None = None,
         status: str | None = None,
         tags: list[str] | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict[str, object]:
         self._authorize(scope)
         self.ensure_ready()
@@ -100,12 +102,18 @@ class KnowledgeGateway:
             raise ValidationError("limit must be between 1 and 100")
         if document_type and document_type not in self.taxonomy:
             raise ValidationError(f"unknown document type: {document_type}")
+        since_bound = parse_time_bound(since, "since")
+        until_bound = parse_time_bound(until, "until")
+        if since_bound and until_bound and since_bound > until_bound:
+            raise ValidationError("since must be less than or equal to until")
         results = self.index.search(
             query,
             limit=limit,
             document_type=document_type,
             status=status,
             tags=tags,
+            since=since_bound,
+            until=until_bound,
         )
         for result in results:
             result.pop("tags_json", None)
@@ -485,6 +493,25 @@ class KnowledgeGateway:
 def revision_for(content: str) -> str:
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return f"sha256:{digest}"
+
+
+def parse_time_bound(value: str | None, field: str) -> str | None:
+    """Normalize an inclusive ISO-8601 bound for updated_at filtering."""
+    if value is None:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        raise ValidationError(f"{field} must be a non-empty ISO-8601 timestamp")
+    normalized = candidate.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValidationError(
+            f"{field} must be an ISO-8601 timestamp"
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.isoformat()
 
 
 def hash_request(payload: dict[str, object]) -> str:

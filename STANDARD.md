@@ -77,7 +77,7 @@ The gateway exposes a small MCP tool surface:
 | Tool | Purpose |
 |---|---|
 | `kb_overview` | Read bundle identity, taxonomy, health, and latest revision |
-| `kb_search` | Search metadata and content; optionally combine lexical and semantic results |
+| `kb_search` | Search metadata and content; filter by type, status, tags, and inclusive `updated_at` bounds (`since` / `until`); each hit includes `updated_at` |
 | `kb_get` | Read one hydrated document and its revision |
 | `kb_upsert` | Create or replace one document using optimistic concurrency |
 | `kb_archive` | Move a document to the archive without destroying history |

@@ -74,8 +74,15 @@ def create_mcp(
         document_type: str | None = None,
         status: str | None = None,
         tags: list[str] | None = None,
+        since: str | None = None,
+        until: str | None = None,
     ) -> dict[str, object]:
-        """Search active OKF metadata and content with optional exact filters."""
+        """Search active OKF metadata and content with optional exact filters.
+
+        Results include updated_at (last accepted gateway mutation). Optional
+        since/until are inclusive ISO-8601 bounds on updated_at. An empty query
+        lists matching documents newest-first.
+        """
         return await _call(
             service.search,
             actor_from_request(settings),
@@ -85,6 +92,8 @@ def create_mcp(
             document_type=document_type,
             status=status,
             tags=tags,
+            since=since,
+            until=until,
         )
 
     @mcp.tool

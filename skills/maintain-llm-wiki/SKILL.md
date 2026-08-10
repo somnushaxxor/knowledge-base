@@ -40,10 +40,13 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
 ## Read
 
 1. Call `kb_search` with the user's terms and likely synonyms.
-2. Hydrate promising hits with `kb_get`; do not answer from snippets alone.
-3. Follow internal links when they materially affect the answer.
-4. Distinguish stored knowledge from inference.
-5. Cite the relevant knowledge paths or original sources when useful.
+2. For “recently / yesterday / since date” recall, pass inclusive ISO-8601
+   `since` / `until` on `updated_at`, or use an empty query to list newest
+   matching documents first. Prefer `updated_at` over `generated.at`.
+3. Hydrate promising hits with `kb_get`; do not answer from snippets alone.
+4. Follow internal links when they materially affect the answer.
+5. Distinguish stored knowledge from inference.
+6. Cite the relevant knowledge paths or original sources when useful.
 
 ## Create or update
 
