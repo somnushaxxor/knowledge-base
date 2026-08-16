@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import yaml
 
 from .errors import ConfigurationError, ValidationError
+from .files import FILES_FOLDER
 from .models import ParsedDocument, TaxonomyType
 
 REQUIRED_METADATA = ("type", "title", "description", "status", "tags", "generated")
@@ -62,6 +63,8 @@ def normalize_document_path(value: str) -> str:
         raise ValidationError("path must stay inside the bundle")
     if any(part.startswith(".") for part in path.parts):
         raise ValidationError("hidden paths are reserved by the gateway")
+    if path.parts[0] == FILES_FOLDER:
+        raise ValidationError("files/ is reserved for binary artifacts")
     if path.suffix.lower() != ".md":
         raise ValidationError("knowledge documents must use the .md extension")
     return path.as_posix()
@@ -186,8 +189,12 @@ def find_markdown_files(bundle_path: Path) -> list[Path]:
     """Return knowledge documents while excluding gateway and Git internals."""
     if not bundle_path.exists():
         return []
-    return sorted(
-        path
-        for path in bundle_path.rglob("*.md")
-        if ".git" not in path.parts and not any(part.startswith(".") for part in path.parts)
-    )
+    matches: list[Path] = []
+    for path in bundle_path.rglob("*.md"):
+        relative = path.relative_to(bundle_path)
+        if ".git" in relative.parts or relative.parts[:1] == (FILES_FOLDER,):
+            continue
+        if any(part.startswith(".") for part in relative.parts):
+            continue
+        matches.append(path)
+    return sorted(matches)

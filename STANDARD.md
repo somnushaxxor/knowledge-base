@@ -76,10 +76,13 @@ The gateway exposes a small MCP tool surface:
 
 | Tool | Purpose |
 |---|---|
-| `kb_overview` | Read bundle identity, taxonomy, health, and latest revision |
+| `kb_overview` | Read bundle identity, taxonomy, health, latest revision, and artifact count |
 | `kb_search` | Search metadata and content; filter by type, status, tags, and inclusive `updated_at` bounds (`since` / `until`); each hit includes `updated_at` |
 | `kb_get` | Read one hydrated document and its revision |
 | `kb_upsert` | Create or replace one document using optimistic concurrency |
+| `kb_put_file` | Store a non-text artifact under reserved `files/` |
+| `kb_get_file` | Read one artifact's metadata and optional base64 bytes |
+| `kb_list_files` | List artifacts stored under `files/` |
 | `kb_archive` | Move a document to the archive without destroying history |
 | `kb_history` | Inspect revisions, provenance, and change history |
 | `kb_validate` | Validate a proposed document or the whole bundle |
@@ -91,15 +94,15 @@ requires:
 - the gateway's configured knowledge-base scope;
 - an idempotency key;
 - `expected_revision` for an update, or an explicit create-only condition;
-- a complete OKF document;
+- a complete OKF document, or a binary artifact destined for `files/`;
 - an audit reason or source reference.
 
 All authenticated calls use the fixed audit actor `single-user`. This profile
 does not distinguish which of the owner's clients used the shared token.
 
 The gateway verifies the bearer token and scope, performs validation, obtains a
-mutation lock, checks the expected revision, writes atomically, and updates the
-search projection. Live writes do not create Git commits. It then returns:
+mutation lock, checks the expected revision, and writes atomically. Document
+writes also update the search projection. Live writes do not create Git commits. It then returns:
 
 ```json
 {
@@ -172,6 +175,25 @@ decision and a migration plan. Adding undeclared types during ordinary capture
 is not allowed. Before switching `KB_TAXONOMY_PATH`, record the reason, map
 affected documents and links, migrate the bundle, and validate the complete
 bundle against the proposed taxonomy.
+
+### Binary artifacts
+
+The reserved top-level directory `files/` stores non-text artifacts that have
+durable value as data: PDFs, images, and other binary objects. It is not an
+OKF document tree. Textual knowledge remains Markdown with YAML frontmatter.
+
+- Artifact paths are bundle-relative and must begin with `files/`.
+- `kb_put_file` accepts raw bytes as standard base64, with the same
+  idempotency and optimistic-concurrency rules as `kb_upsert`.
+- Text extensions such as `.md`, `.txt`, `.json`, and `.yaml` are rejected.
+  Those belong in knowledge documents, not in `files/`.
+- Decoded payloads must not exceed 10 MiB.
+- Artifacts are not indexed for full-text search. Link them from a knowledge
+  page with a bundle-absolute path such as `/files/receipts/tax.pdf`.
+- The Git backup includes `files/` with the rest of the bundle.
+
+The gateway must never treat files under `files/` as knowledge documents, even
+if a `.md` file is placed there outside the tool surface.
 
 ## 6. LLM Wiki maintenance method
 

@@ -31,6 +31,7 @@ provenance, concurrency, authentication, and backup rules in every agent.
 
 - For a question or recall request, follow **Read**.
 - For “remember this,” ingestion, or durable new knowledge, follow **Create or update**.
+- For a PDF, image, or other non-text artifact, follow **Store an artifact**, then link it from a knowledge page.
 - For restructuring, deduplication, or stale material, follow **Curate**.
 - For write conflicts, follow **Resolve a conflict**.
 - For recovery assurance, follow **Check backup**.
@@ -63,6 +64,20 @@ Read [references/okf-profile.md](references/okf-profile.md) before creating or s
 8. Call `kb_upsert` with an idempotency key and `expected_revision`, or an explicit create-only condition.
 9. Keep the returned path, revision, and backup state in the working context.
 10. Report success only after receiving the receipt. If backup is pending, distinguish “saved live” from “backed up.”
+
+## Store an artifact
+
+Use reserved `files/` for durable non-text data (PDF, images, other binaries).
+Do not put textual knowledge there.
+
+1. Confirm the object is a non-text artifact and is safe to store.
+2. Choose a stable bundle path under `files/`, for example `files/receipts/tax-2026.pdf`.
+3. Encode the raw bytes as standard base64 and call `kb_put_file` with an
+   idempotency key and `create_only=true`, or `expected_revision` when replacing.
+4. Keep the receipt. Then create or update a knowledge page that explains why
+   the artifact matters and links to it as `/files/...`.
+5. Recall later with `kb_list_files` or `kb_get_file`. Full-text search does
+   not index artifact bytes.
 
 ## Curate
 

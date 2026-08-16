@@ -125,6 +125,54 @@ def create_mcp(
         )
 
     @mcp.tool
+    async def kb_put_file(
+        scope: str,
+        path: str,
+        content_base64: str,
+        idempotency_key: str,
+        reason: str,
+        expected_revision: str | None = None,
+        create_only: bool = False,
+    ) -> dict[str, object]:
+        """Store a non-text artifact under files/ with optimistic concurrency.
+
+        Path must be bundle-relative and start with files/. Text extensions are
+        rejected; knowledge text belongs in OKF Markdown. Send raw bytes as
+        standard base64. Maximum decoded size is 10 MiB.
+        """
+        return await _call(
+            service.put_file,
+            actor_from_request(settings),
+            scope,
+            path=path,
+            content_base64=content_base64,
+            idempotency_key=idempotency_key,
+            reason=reason,
+            expected_revision=expected_revision,
+            create_only=create_only,
+        )
+
+    @mcp.tool
+    async def kb_get_file(
+        scope: str,
+        path: str,
+        include_content: bool = True,
+    ) -> dict[str, object]:
+        """Read one files/ artifact: metadata and optional base64 bytes."""
+        return await _call(
+            service.get_file,
+            actor_from_request(settings),
+            scope,
+            path,
+            include_content=include_content,
+        )
+
+    @mcp.tool
+    async def kb_list_files(scope: str) -> dict[str, object]:
+        """List non-text artifacts stored under files/."""
+        return await _call(service.list_files, actor_from_request(settings), scope)
+
+    @mcp.tool
     async def kb_archive(
         scope: str,
         path: str,

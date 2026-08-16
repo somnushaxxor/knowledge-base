@@ -2,7 +2,7 @@
 
 ## Required tool behavior
 
-Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_validate`, `kb_upsert`, `kb_archive`, `kb_history`, and `kb_backup_status`.
+Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_validate`, `kb_upsert`, `kb_put_file`, `kb_get_file`, `kb_list_files`, `kb_archive`, `kb_history`, and `kb_backup_status`.
 
 ## Create
 
@@ -12,6 +12,12 @@ Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_val
 3. Validate the complete document.
 4. Send `kb_upsert` with a unique idempotency key and create-only precondition.
 5. Retain the returned receipt.
+
+## Store a file
+
+1. Use a path under `files/` with a non-text extension.
+2. Send `kb_put_file` with unique idempotency key and create-only, or the current `expected_revision` when replacing.
+3. Link `/files/...` from the relevant knowledge page. Do not treat the artifact as a searchable wiki page.
 
 ## Update
 

@@ -8,9 +8,10 @@ The canonical bundle follows Open Knowledge Format v0.2 with additional local co
   agent-kit repository.
 - Store versioned backups in a separate private backup destination.
 - Reserve root `index.md` for navigation and `log.md` for notable changes.
+- Reserve top-level `files/` for non-text artifacts (PDF, images, other binaries).
 - Use UTF-8 Markdown.
 - Use bundle-absolute internal Markdown links such as
-  `/<configured-folder>/<document-slug>.md`.
+  `/<configured-folder>/<document-slug>.md` or `/files/<artifact>`.
 - Keep non-knowledge configuration outside the bundle.
 
 ## Required document metadata

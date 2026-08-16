@@ -1,8 +1,8 @@
 # FastMCP Knowledge Gateway
 
 This directory contains the executable reference implementation of the
-Knowledge Gateway defined in [`STANDARD.md`](../STANDARD.md). It exposes all
-eight normative tools over MCP Streamable HTTP while keeping the live OKF
+Knowledge Gateway defined in [`STANDARD.md`](../STANDARD.md). It exposes the
+normative MCP tools over Streamable HTTP while keeping the live OKF
 bundle and operational data outside this repository.
 
 Status: **reference alpha**. The local consistency path is implemented and
@@ -17,6 +17,9 @@ environment.
 | `kb_search` | SQLite FTS5 content search (OR across tokens; BM25 rank) with type, status, tag, and inclusive `updated_at` (`since` / `until`) filters; hits include `updated_at` |
 | `kb_get` | Complete Markdown, parsed metadata, and SHA-256 revision |
 | `kb_upsert` | Create or replace with validation, idempotency, and concurrency checks |
+| `kb_put_file` | Store a non-text artifact under reserved `files/` (base64, max 10 MiB) |
+| `kb_get_file` | Artifact metadata and optional base64 bytes |
+| `kb_list_files` | Inventory of `files/` |
 | `kb_archive` | Move under `archive/` |
 | `kb_history` | Gateway audit receipts and backup Git history |
 | `kb_validate` | Proposed-document or whole-bundle validation |
@@ -113,7 +116,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 Configure every MCP client to send it as
-`Authorization: Bearer <token>`. A successful match grants access to all eight
+`Authorization: Bearer <token>`. A successful match grants access to all MCP
 tools and records mutations as `single-user`. There are no roles, per-tool
 permissions, membership records, JWT claims, or token expiry in this profile.
 
@@ -150,7 +153,8 @@ Runtime data is deliberately split from source code:
 
 ```text
 /data/
-├── bundle/                     canonical OKF files and local .git history
+├── bundle/                     canonical OKF files, files/ artifacts, and local .git history
+│   └── files/                  reserved non-text artifacts (PDF, images, other binaries)
 └── state/
     ├── gateway.sqlite3         FTS projection, audit, and idempotency
     ├── backup.json             last observed Git backup state

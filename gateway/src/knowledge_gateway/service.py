@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import fcntl
 import hashlib
 import json
@@ -18,6 +19,14 @@ from .errors import (
     ConflictError,
     NotFoundError,
     ValidationError,
+)
+from .files import (
+    FILES_FOLDER,
+    decode_file_content,
+    find_artifact_files,
+    media_type_for,
+    normalize_file_path,
+    revision_for_bytes,
 )
 from .git_backend import GitBackend
 from .index import GatewayIndex
@@ -78,6 +87,7 @@ class KnowledgeGateway:
                 for name, entry in self.taxonomy.items()
             },
             "document_count": self.index.document_count(),
+            "file_count": len(find_artifact_files(self.settings.bundle_path)),
             "latest_commit": self.git.head(),
             "health": "ok" if validation["valid"] else "degraded",
             "validation_issue_count": validation["issue_count"],
@@ -228,6 +238,147 @@ class KnowledgeGateway:
             )
             return response
 
+    def put_file(
+        self,
+        actor: Actor,
+        scope: str,
+        *,
+        path: str,
+        content_base64: str,
+        idempotency_key: str,
+        reason: str,
+        expected_revision: str | None = None,
+        create_only: bool = False,
+    ) -> dict[str, object]:
+        self._authorize(scope)
+        self.ensure_ready()
+        normalized = normalize_file_path(path)
+        self._require_mutation_fields(idempotency_key, reason)
+        content = decode_file_content(content_base64)
+        revision = revision_for_bytes(content)
+        request_hash = hash_request(
+            {
+                "operation": "put_file",
+                "scope": scope,
+                "path": normalized,
+                "revision": revision,
+                "expected_revision": expected_revision,
+                "create_only": create_only,
+                "reason": reason,
+            }
+        )
+        replay = self._idempotent_replay(actor, idempotency_key, request_hash)
+        if replay is not None:
+            return replay
+
+        with self._mutation_lock():
+            replay = self._idempotent_replay(actor, idempotency_key, request_hash)
+            if replay is not None:
+                return replay
+            target = self._target(normalized)
+            exists = target.is_file()
+            previous_content = target.read_bytes() if exists else None
+            previous_revision = (
+                revision_for_bytes(previous_content)
+                if previous_content is not None
+                else None
+            )
+            if exists and create_only:
+                raise ConflictError(f"create-only file already exists: {normalized}")
+            if exists and expected_revision is None:
+                raise ConflictError("expected_revision is required when updating")
+            if exists and expected_revision != previous_revision:
+                raise ConflictError(
+                    f"revision conflict: expected {expected_revision}, current {previous_revision}"
+                )
+            if not exists and not create_only:
+                raise ConflictError("new files require create_only=true")
+            if not exists and expected_revision is not None:
+                raise ConflictError("expected_revision must be omitted when creating")
+
+            self._atomic_write_bytes(target, content)
+            accepted_at = now()
+            self.git.mark_pending()
+            backup = self.git.backup_status()["status"]
+            response: dict[str, object] = {
+                "path": normalized,
+                "revision": revision,
+                "bytes": len(content),
+                "media_type": media_type_for(normalized),
+                "commit": None,
+                "backup": backup,
+                "accepted_at": accepted_at,
+                "idempotent_replay": False,
+            }
+            self.index.record_mutation(
+                scope=scope,
+                actor_id=actor.actor_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                response=response,
+                audit={
+                    "scope": scope,
+                    "path": normalized,
+                    "operation": "put_file",
+                    "actor_id": actor.actor_id,
+                    "delegating_principal": None,
+                    "previous_revision": previous_revision,
+                    "revision": revision,
+                    "commit_hash": "",
+                    "reason": reason,
+                    "accepted_at": accepted_at,
+                },
+            )
+            return response
+
+    def get_file(
+        self,
+        actor: Actor,
+        scope: str,
+        path: str,
+        *,
+        include_content: bool = True,
+    ) -> dict[str, object]:
+        self._authorize(scope)
+        self.ensure_ready()
+        normalized = normalize_file_path(path)
+        target = self._target(normalized)
+        if not target.is_file():
+            raise NotFoundError(f"file does not exist: {normalized}")
+        content = target.read_bytes()
+        payload: dict[str, object] = {
+            "scope": scope,
+            "path": normalized,
+            "revision": revision_for_bytes(content),
+            "bytes": len(content),
+            "media_type": media_type_for(normalized),
+        }
+        if include_content:
+            payload["content_base64"] = base64.b64encode(content).decode("ascii")
+        return payload
+
+    def list_files(self, actor: Actor, scope: str) -> dict[str, object]:
+        self._authorize(scope)
+        self.ensure_ready()
+        files = []
+        for file_path in find_artifact_files(self.settings.bundle_path):
+            relative = file_path.relative_to(self.settings.bundle_path).as_posix()
+            content = file_path.read_bytes()
+            files.append(
+                {
+                    "path": relative,
+                    "revision": revision_for_bytes(content),
+                    "bytes": len(content),
+                    "media_type": media_type_for(relative),
+                }
+            )
+        return {
+            "scope": scope,
+            "folder": FILES_FOLDER,
+            "count": len(files),
+            "files": files,
+        }
+
     def archive(
         self,
         actor: Actor,
@@ -314,7 +465,7 @@ class KnowledgeGateway:
     ) -> dict[str, object]:
         self._authorize(scope)
         self.ensure_ready()
-        normalized = normalize_document_path(path)
+        normalized = self._normalize_stored_path(path)
         if limit < 1 or limit > 100:
             raise ValidationError("limit must be between 1 and 100")
         return {
@@ -402,6 +553,12 @@ class KnowledgeGateway:
         if scope != self.settings.scope:
             raise AuthorizationError("scope is not available to this gateway instance")
 
+    def _normalize_stored_path(self, path: str) -> str:
+        stripped = path.lstrip("/")
+        if stripped == FILES_FOLDER or stripped.startswith(f"{FILES_FOLDER}/"):
+            return normalize_file_path(path)
+        return normalize_document_path(path)
+
     def _target(self, normalized_path: str) -> Path:
         target = self.settings.bundle_path.joinpath(*normalized_path.split("/"))
         bundle = self.settings.bundle_path.resolve()
@@ -451,13 +608,29 @@ class KnowledgeGateway:
                 output.flush()
                 os.fsync(output.fileno())
             os.replace(temporary, target)
-            directory_fd = os.open(target.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
+            self._fsync_directory(target.parent)
         finally:
             temporary.unlink(missing_ok=True)
+
+    def _atomic_write_bytes(self, target: Path, content: bytes) -> None:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+        try:
+            with temporary.open("wb") as output:
+                output.write(content)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, target)
+            self._fsync_directory(target.parent)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _fsync_directory(self, directory: Path) -> None:
+        directory_fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
 
     def _remove_empty_parents(self, start: Path) -> None:
         bundle = self.settings.bundle_path.resolve()
