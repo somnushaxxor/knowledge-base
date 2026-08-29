@@ -7,7 +7,7 @@ description: Maintain, search, ingest, and curate the shared cloud-first LLM Wik
 
 This skill is a **trigger**. The Knowledge Gateway MCP is self-describing.
 
-1. Call `kb_overview` with the configured scope.
+1. Call `kb_overview`.
 2. Follow `usage` and `taxonomy` from that result for every read and write.
 3. Do not invent document types. Do not write the live bundle or Git backup.
 4. Report success only after a gateway write receipt.

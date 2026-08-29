@@ -15,7 +15,6 @@ from typing import Iterator
 
 from .config import Settings
 from .errors import (
-    AuthorizationError,
     ConflictError,
     NotFoundError,
     ValidationError,
@@ -42,7 +41,7 @@ from .okf import (
 
 
 class KnowledgeGateway:
-    """Single-scope authority for one mounted OKF bundle."""
+    """Authority for one mounted OKF bundle."""
 
     def __init__(self, settings: Settings):
         settings.validate()
@@ -73,12 +72,10 @@ class KnowledgeGateway:
             self.rebuild_index()
             self._ready = True
 
-    def overview(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(scope)
+    def overview(self, actor: Actor) -> dict[str, object]:
         self.ensure_ready()
-        validation = self.validate_bundle(actor, scope)
+        validation = self.validate_bundle(actor)
         return {
-            "scope": self.settings.scope,
             "bundle_path": str(self.settings.bundle_path),
             "taxonomy": {
                 name: {
@@ -102,7 +99,6 @@ class KnowledgeGateway:
     def search(
         self,
         actor: Actor,
-        scope: str,
         query: str,
         *,
         limit: int = 10,
@@ -112,7 +108,6 @@ class KnowledgeGateway:
         since: str | None = None,
         until: str | None = None,
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         if limit < 1 or limit > 100:
             raise ValidationError("limit must be between 1 and 100")
@@ -133,10 +128,9 @@ class KnowledgeGateway:
         )
         for result in results:
             result.pop("tags_json", None)
-        return {"scope": scope, "query": query, "count": len(results), "results": results}
+        return {"query": query, "count": len(results), "results": results}
 
-    def get(self, actor: Actor, scope: str, path: str) -> dict[str, object]:
-        self._authorize(scope)
+    def get(self, actor: Actor, path: str) -> dict[str, object]:
         self.ensure_ready()
         normalized = normalize_document_path(path)
         target = self._target(normalized)
@@ -145,7 +139,6 @@ class KnowledgeGateway:
         content = target.read_text(encoding="utf-8")
         document = parse_document(content)
         return {
-            "scope": scope,
             "path": normalized,
             "revision": revision_for(content),
             "metadata": document.metadata,
@@ -155,7 +148,6 @@ class KnowledgeGateway:
     def upsert(
         self,
         actor: Actor,
-        scope: str,
         *,
         path: str,
         content: str,
@@ -164,14 +156,13 @@ class KnowledgeGateway:
         expected_revision: str | None = None,
         create_only: bool = False,
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         self._require_mutation_fields(idempotency_key, reason)
         request_hash = hash_request(
             {
                 "operation": "upsert",
-                "scope": scope,
+                "scope": self.settings.scope,
                 "path": normalized,
                 "content": content,
                 "expected_revision": expected_revision,
@@ -224,13 +215,13 @@ class KnowledgeGateway:
                 "idempotent_replay": False,
             }
             self.index.record_mutation(
-                scope=scope,
+                scope=self.settings.scope,
                 actor_id=actor.actor_id,
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 response=response,
                 audit={
-                    "scope": scope,
+                    "scope": self.settings.scope,
                     "path": normalized,
                     "operation": "upsert",
                     "actor_id": actor.actor_id,
@@ -247,7 +238,6 @@ class KnowledgeGateway:
     def put_file(
         self,
         actor: Actor,
-        scope: str,
         *,
         path: str,
         content_base64: str,
@@ -256,7 +246,6 @@ class KnowledgeGateway:
         expected_revision: str | None = None,
         create_only: bool = False,
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_file_path(path)
         self._require_mutation_fields(idempotency_key, reason)
@@ -265,7 +254,7 @@ class KnowledgeGateway:
         request_hash = hash_request(
             {
                 "operation": "put_file",
-                "scope": scope,
+                "scope": self.settings.scope,
                 "path": normalized,
                 "revision": revision,
                 "expected_revision": expected_revision,
@@ -317,13 +306,13 @@ class KnowledgeGateway:
                 "idempotent_replay": False,
             }
             self.index.record_mutation(
-                scope=scope,
+                scope=self.settings.scope,
                 actor_id=actor.actor_id,
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 response=response,
                 audit={
-                    "scope": scope,
+                    "scope": self.settings.scope,
                     "path": normalized,
                     "operation": "put_file",
                     "actor_id": actor.actor_id,
@@ -340,12 +329,10 @@ class KnowledgeGateway:
     def get_file(
         self,
         actor: Actor,
-        scope: str,
         path: str,
         *,
         include_content: bool = True,
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_file_path(path)
         target = self._target(normalized)
@@ -353,7 +340,6 @@ class KnowledgeGateway:
             raise NotFoundError(f"file does not exist: {normalized}")
         content = target.read_bytes()
         payload: dict[str, object] = {
-            "scope": scope,
             "path": normalized,
             "revision": revision_for_bytes(content),
             "bytes": len(content),
@@ -363,8 +349,7 @@ class KnowledgeGateway:
             payload["content_base64"] = base64.b64encode(content).decode("ascii")
         return payload
 
-    def list_files(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(scope)
+    def list_files(self, actor: Actor) -> dict[str, object]:
         self.ensure_ready()
         files = []
         for file_path in find_artifact_files(self.settings.bundle_path):
@@ -379,7 +364,6 @@ class KnowledgeGateway:
                 }
             )
         return {
-            "scope": scope,
             "folder": FILES_FOLDER,
             "count": len(files),
             "files": files,
@@ -388,21 +372,19 @@ class KnowledgeGateway:
     def archive(
         self,
         actor: Actor,
-        scope: str,
         *,
         path: str,
         expected_revision: str,
         idempotency_key: str,
         reason: str,
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         normalized = normalize_document_path(path)
         self._require_mutation_fields(idempotency_key, reason)
         request_hash = hash_request(
             {
                 "operation": "archive",
-                "scope": scope,
+                "scope": self.settings.scope,
                 "path": normalized,
                 "expected_revision": expected_revision,
                 "reason": reason,
@@ -446,13 +428,13 @@ class KnowledgeGateway:
                 "idempotent_replay": False,
             }
             self.index.record_mutation(
-                scope=scope,
+                scope=self.settings.scope,
                 actor_id=actor.actor_id,
                 idempotency_key=idempotency_key,
                 request_hash=request_hash,
                 response=response,
                 audit={
-                    "scope": scope,
+                    "scope": self.settings.scope,
                     "path": normalized,
                     "operation": "archive",
                     "actor_id": actor.actor_id,
@@ -467,32 +449,28 @@ class KnowledgeGateway:
             return response
 
     def history(
-        self, actor: Actor, scope: str, path: str, limit: int = 20
+        self, actor: Actor, path: str, limit: int = 20
     ) -> dict[str, object]:
-        self._authorize(scope)
         self.ensure_ready()
         normalized = self._normalize_stored_path(path)
         if limit < 1 or limit > 100:
             raise ValidationError("limit must be between 1 and 100")
         return {
-            "scope": scope,
             "path": normalized,
             "audit": self.index.audit_history(normalized, limit),
             "git": self.git.history(normalized, limit),
         }
 
     def validate_proposed(
-        self, actor: Actor, scope: str, path: str, content: str
+        self, actor: Actor, path: str, content: str
     ) -> dict[str, object]:
-        self._authorize(scope)
         try:
             validate_document(path, content, self.taxonomy)
         except ValidationError as exc:
             return {"valid": False, "issue_count": len(exc.issues), "issues": exc.issues}
         return {"valid": True, "issue_count": 0, "issues": []}
 
-    def validate_bundle(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(scope)
+    def validate_bundle(self, actor: Actor) -> dict[str, object]:
         self.ensure_ready()
         issues: list[dict[str, str]] = []
         for file_path in find_markdown_files(self.settings.bundle_path):
@@ -514,11 +492,9 @@ class KnowledgeGateway:
                     issues.append({"path": relative, "message": str(exc)})
         return {"valid": not issues, "issue_count": len(issues), "issues": issues}
 
-    def backup_status(self, actor: Actor, scope: str) -> dict[str, object]:
-        self._authorize(scope)
+    def backup_status(self, actor: Actor) -> dict[str, object]:
         self.ensure_ready()
         return {
-            "scope": scope,
             "backup_interval_hours": self.settings.backup_interval_hours,
             "git": self.git.backup_status(),
         }
@@ -554,10 +530,6 @@ class KnowledgeGateway:
             self.index.replace_document(
                 self._index_row(relative, revision_for(content), document, now())
             )
-
-    def _authorize(self, scope: str) -> None:
-        if scope != self.settings.scope:
-            raise AuthorizationError("scope is not available to this gateway instance")
 
     def _normalize_stored_path(self, path: str) -> str:
         stripped = path.lstrip("/")

@@ -65,18 +65,17 @@ def create_mcp(
     )
 
     @mcp.tool
-    async def kb_overview(scope: str) -> dict[str, object]:
+    async def kb_overview() -> dict[str, object]:
         """Read how this knowledge base works: taxonomy (types, purpose, folders,
         sections), write/read usage, health, and latest durable revision.
 
         Call this before the first write in a session and follow `usage` plus
         `taxonomy`. Do not copy a parallel write protocol from a skill.
         """
-        return await _call(service.overview, actor_from_request(settings), scope)
+        return await _call(service.overview, actor_from_request(settings))
 
     @mcp.tool
     async def kb_search(
-        scope: str,
         query: str,
         limit: int = 10,
         document_type: str | None = None,
@@ -94,7 +93,6 @@ def create_mcp(
         return await _call(
             service.search,
             actor_from_request(settings),
-            scope,
             query,
             limit=limit,
             document_type=document_type,
@@ -105,13 +103,12 @@ def create_mcp(
         )
 
     @mcp.tool
-    async def kb_get(scope: str, path: str) -> dict[str, object]:
+    async def kb_get(path: str) -> dict[str, object]:
         """Read one complete document with parsed metadata and current revision."""
-        return await _call(service.get, actor_from_request(settings), scope, path)
+        return await _call(service.get, actor_from_request(settings), path)
 
     @mcp.tool
     async def kb_upsert(
-        scope: str,
         path: str,
         content: str,
         idempotency_key: str,
@@ -123,7 +120,6 @@ def create_mcp(
         return await _call(
             service.upsert,
             actor_from_request(settings),
-            scope,
             path=path,
             content=content,
             idempotency_key=idempotency_key,
@@ -134,7 +130,6 @@ def create_mcp(
 
     @mcp.tool
     async def kb_put_file(
-        scope: str,
         path: str,
         content_base64: str,
         idempotency_key: str,
@@ -151,7 +146,6 @@ def create_mcp(
         return await _call(
             service.put_file,
             actor_from_request(settings),
-            scope,
             path=path,
             content_base64=content_base64,
             idempotency_key=idempotency_key,
@@ -162,7 +156,6 @@ def create_mcp(
 
     @mcp.tool
     async def kb_get_file(
-        scope: str,
         path: str,
         include_content: bool = True,
     ) -> dict[str, object]:
@@ -170,19 +163,17 @@ def create_mcp(
         return await _call(
             service.get_file,
             actor_from_request(settings),
-            scope,
             path,
             include_content=include_content,
         )
 
     @mcp.tool
-    async def kb_list_files(scope: str) -> dict[str, object]:
+    async def kb_list_files() -> dict[str, object]:
         """List non-text artifacts stored under files/."""
-        return await _call(service.list_files, actor_from_request(settings), scope)
+        return await _call(service.list_files, actor_from_request(settings))
 
     @mcp.tool
     async def kb_archive(
-        scope: str,
         path: str,
         expected_revision: str,
         idempotency_key: str,
@@ -192,7 +183,6 @@ def create_mcp(
         return await _call(
             service.archive,
             actor_from_request(settings),
-            scope,
             path=path,
             expected_revision=expected_revision,
             idempotency_key=idempotency_key,
@@ -201,7 +191,6 @@ def create_mcp(
 
     @mcp.tool
     async def kb_history(
-        scope: str,
         path: str,
         limit: int = 20,
     ) -> dict[str, object]:
@@ -209,14 +198,12 @@ def create_mcp(
         return await _call(
             service.history,
             actor_from_request(settings),
-            scope,
             path,
             limit,
         )
 
     @mcp.tool
     async def kb_validate(
-        scope: str,
         path: str | None = None,
         content: str | None = None,
     ) -> dict[str, object]:
@@ -225,13 +212,13 @@ def create_mcp(
         if (path is None) != (content is None):
             raise ToolError("path and content must be provided together")
         if path is not None and content is not None:
-            return await _call(service.validate_proposed, actor, scope, path, content)
-        return await _call(service.validate_bundle, actor, scope)
+            return await _call(service.validate_proposed, actor, path, content)
+        return await _call(service.validate_bundle, actor)
 
     @mcp.tool
-    async def kb_backup_status(scope: str) -> dict[str, object]:
+    async def kb_backup_status() -> dict[str, object]:
         """Report local Git and remote Git backup recovery points."""
-        return await _call(service.backup_status, actor_from_request(settings), scope)
+        return await _call(service.backup_status, actor_from_request(settings))
 
     return mcp
 

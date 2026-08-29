@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from knowledge_gateway.errors import AuthorizationError, ConflictError, ValidationError
+from knowledge_gateway.errors import ConflictError, ValidationError
 from knowledge_gateway.models import Actor
 from knowledge_gateway.okf import load_taxonomy, validate_document
 from knowledge_gateway.service import KnowledgeGateway
@@ -15,7 +15,6 @@ def create_note(
 ) -> dict[str, object]:
     return service.upsert(
         actor,
-        "test",
         path="notes/fastmcp-gateway.md",
         content=content,
         idempotency_key="create-1",
@@ -39,13 +38,13 @@ def test_create_search_get_and_idempotent_replay(
     assert replay["commit"] is None
     assert replay["idempotent_replay"] is True
 
-    found = service.search(actor, "test", "serializes writes")
+    found = service.search(actor, "serializes writes")
     assert found["count"] == 1
     assert found["results"][0]["path"] == "notes/fastmcp-gateway.md"
     assert "updated_at" in found["results"][0]
     assert found["results"][0]["updated_at"]
 
-    loaded = service.get(actor, "test", "notes/fastmcp-gateway.md")
+    loaded = service.get(actor, "notes/fastmcp-gateway.md")
     assert loaded["revision"] == receipt["revision"]
     assert loaded["metadata"]["type"] == "Note"
     assert loaded["content"] == note
@@ -60,7 +59,6 @@ def test_search_exposes_updated_at_and_time_bounds(
     )
     service.upsert(
         actor,
-        "test",
         path="notes/older.md",
         content=older,
         idempotency_key="create-older",
@@ -79,7 +77,6 @@ def test_search_exposes_updated_at_and_time_bounds(
 
     recent = service.search(
         actor,
-        "test",
         "",
         since="2026-08-09T00:00:00Z",
         until="2026-08-11T00:00:00+00:00",
@@ -91,7 +88,6 @@ def test_search_exposes_updated_at_and_time_bounds(
 
     lexical = service.search(
         actor,
-        "test",
         "gateway",
         since="2026-08-09",
     )
@@ -99,12 +95,11 @@ def test_search_exposes_updated_at_and_time_bounds(
     assert lexical["results"][0]["path"] == "notes/fastmcp-gateway.md"
 
     with pytest.raises(ValidationError, match="ISO-8601"):
-        service.search(actor, "test", "", since="yesterday")
+        service.search(actor, "", since="yesterday")
 
     with pytest.raises(ValidationError, match="less than or equal"):
         service.search(
             actor,
-            "test",
             "",
             since="2026-08-11T00:00:00Z",
             until="2026-08-10T00:00:00Z",
@@ -140,7 +135,6 @@ def test_update_requires_current_revision(
     with pytest.raises(ConflictError, match="revision conflict"):
         service.upsert(
             actor,
-            "test",
             path="notes/fastmcp-gateway.md",
             content=updated_content,
             idempotency_key="update-stale",
@@ -150,7 +144,6 @@ def test_update_requires_current_revision(
 
     updated = service.upsert(
         actor,
-        "test",
         path="notes/fastmcp-gateway.md",
         content=updated_content,
         idempotency_key="update-current",
@@ -168,7 +161,6 @@ def test_concurrent_updates_do_not_silently_overwrite(
     def update(label: str) -> dict[str, object]:
         return service.upsert(
             actor,
-            "test",
             path="notes/fastmcp-gateway.md",
             content=note.replace(
                 "The gateway serializes writes.",
@@ -198,7 +190,6 @@ def test_archive_preserves_receipt_and_history(
     created = create_note(service, actor, note)
     archived = service.archive(
         actor,
-        "test",
         path="notes/fastmcp-gateway.md",
         expected_revision=str(created["revision"]),
         idempotency_key="archive-1",
@@ -206,29 +197,26 @@ def test_archive_preserves_receipt_and_history(
     )
 
     assert archived["archived_path"] == "archive/notes/fastmcp-gateway.md"
-    assert service.search(actor, "test", "FastMCP")["count"] == 0
-    history = service.history(actor, "test", "notes/fastmcp-gateway.md")
+    assert service.search(actor, "FastMCP")["count"] == 0
+    history = service.history(actor, "notes/fastmcp-gateway.md")
     assert [item["operation"] for item in history["audit"]] == ["archive", "upsert"]
 
 
-def test_validation_and_scope_boundary(
+def test_relative_internal_links_fail_validation(
     service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:
     invalid = note.replace("/notes/another.md", "notes/another.md")
     result = service.validate_proposed(
-        actor, "test", "notes/fastmcp-gateway.md", invalid
+        actor, "notes/fastmcp-gateway.md", invalid
     )
     assert result["valid"] is False
     assert any("bundle-absolute" in issue["message"] for issue in result["issues"])
-
-    with pytest.raises(AuthorizationError):
-        service.overview(actor, "another-scope")
 
 
 def test_overview_is_self_describing(
     service: KnowledgeGateway, actor: Actor
 ) -> None:
-    overview = service.overview(actor, "test")
+    overview = service.overview(actor)
 
     assert overview["taxonomy"]["Note"]["purpose"] == (
         "Exercise gateway validation in automated tests."
@@ -253,7 +241,7 @@ def test_taxonomy_sections_are_guidance(
     )
 
     result = service.validate_proposed(
-        actor, "test", "notes/fastmcp-gateway.md", content
+        actor, "notes/fastmcp-gateway.md", content
     )
 
     assert result == {"valid": True, "issue_count": 0, "issues": []}
@@ -342,7 +330,6 @@ See [another note](/notes/another.md).
 """
     service.upsert(
         actor,
-        "test",
         path="notes/nikita.md",
         content=russian,
         idempotency_key="create-nikita",
@@ -351,7 +338,6 @@ See [another note](/notes/another.md).
     )
     service.upsert(
         actor,
-        "test",
         path="notes/anya.md",
         content=english,
         idempotency_key="create-anya",
@@ -359,7 +345,7 @@ See [another note](/notes/another.md).
         create_only=True,
     )
 
-    found = service.search(actor, "test", "Никита день рождения birthday")
+    found = service.search(actor, "Никита день рождения birthday")
     paths = [result["path"] for result in found["results"]]
 
     assert "notes/nikita.md" in paths

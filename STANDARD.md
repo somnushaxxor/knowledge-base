@@ -14,7 +14,7 @@ This standard defines a knowledge base that:
 - has a versioned backup separate from this agent-kit repository.
 
 The current profile is intentionally single-user. One deployed gateway serves
-one knowledge-base scope and accepts one operator-generated bearer token. That
+one OKF bundle and accepts one operator-generated bearer token. That
 token grants access to the complete MCP tool surface. Membership, multiple
 users, roles, per-tool permissions, and an OAuth authorization server are
 outside this version of the standard.
@@ -54,16 +54,15 @@ technology boundary.
 
 ## 3. Authority and consistency
 
-There is exactly one live authority and one configured scope: the persistent
-OKF bundle mounted by its Knowledge Gateway. Hosting multiple independent
-scopes in one gateway process is outside this profile.
+There is exactly one live authority: the persistent OKF bundle mounted by its
+Knowledge Gateway. Hosting multiple independent bundles in one gateway process
+is outside this profile.
 
 Agents must not:
 
 - use GitHub as the source for live reads;
 - edit the live files through SSH, Drive sync, or a second server;
 - maintain a private canonical memory that is invisible to other agents;
-- send a scope other than the gateway's configured scope;
 - claim that a fact was saved when the gateway did not return a write receipt.
 
 All successful gateway writes are visible to subsequent reads immediately. The
@@ -97,7 +96,6 @@ that payload rather than copying a parallel protocol into a skill.
 Every MCP request requires the configured bearer token. Every mutation also
 requires:
 
-- the gateway's configured knowledge-base scope;
 - an idempotency key;
 - `expected_revision` for an update, or an explicit create-only condition;
 - a complete OKF document, or a binary artifact destined for `files/`;
@@ -106,7 +104,7 @@ requires:
 All authenticated calls use the fixed audit actor `single-user`. This profile
 does not distinguish which of the owner's clients used the shared token.
 
-The gateway verifies the bearer token and scope, performs validation, obtains a
+The gateway verifies the bearer token, performs validation, obtains a
 mutation lock, checks the expected revision, and writes atomically. Document
 writes also update the search projection. Live writes do not create Git commits. It then returns:
 
@@ -305,7 +303,7 @@ Commit only examples or variable names, never live secrets.
   no membership registry, roles, or per-tool permissions.
 - Rotate the token by changing the deployment secret and restarting the
   gateway, then update every configured client.
-- Keep one gateway process bound to one knowledge-base scope.
+- Keep one gateway process bound to one OKF bundle.
 - Redact secrets before persistence and validate documents server-side.
 - Record mutations with the fixed actor `single-user`, timestamp, previous
   revision, and reason.

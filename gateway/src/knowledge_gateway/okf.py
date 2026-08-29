@@ -47,7 +47,6 @@ GATEWAY_USAGE: dict[str, object] = {
         "write the live bundle or Git backup directly",
         "claim a save without a gateway receipt",
         "store secrets or unredacted credentials",
-        "send a scope other than the configured scope",
         "use last-write-wins",
     ],
 }

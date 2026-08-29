@@ -13,5 +13,5 @@
 11. Never commit tokens, keys, passwords, private environment files, or unredacted secrets.
 12. Prefer updating a canonical concept over creating a near-duplicate.
 13. Keep semantic, vector, graph, and full-text indexes rebuildable from the OKF bundle.
-14. Use only the gateway's configured scope. The single bearer token grants its owner access to the complete MCP tool surface.
+14. The single bearer token grants its owner access to the complete MCP tool surface.
 15. Attribute every accepted change to the fixed `single-user` actor.
