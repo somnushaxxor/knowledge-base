@@ -5,16 +5,16 @@ human-readable duplicate.
 
 ## Required tool behavior
 
-Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_validate`, `kb_upsert`, `kb_put_file`, `kb_get_file`, `kb_list_files`, `kb_archive`, `kb_history`, and `kb_backup_status`.
+Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_upsert`, `kb_put_file`, `kb_get_file`, `kb_list_files`, `kb_archive`, and `kb_history`.
 
 ## Create
 
 1. Search for duplicates.
 2. Choose a type and path permitted by the gateway-configured deployment
    taxonomy.
-3. Validate the complete document.
-4. Send `kb_upsert` with a unique idempotency key and create-only precondition.
-5. Retain the returned receipt.
+3. Send `kb_upsert` with a unique idempotency key and create-only precondition.
+   The gateway rejects documents that fail the OKF profile; they are not saved.
+4. Retain the returned receipt.
 
 ## Store a file
 
@@ -26,8 +26,9 @@ Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_val
 
 1. Hydrate the page with `kb_get`.
 2. Retain its revision.
-3. Prepare and validate the complete replacement document.
-4. Send `kb_upsert` with the retained `expected_revision` and a unique idempotency key.
+3. Prepare the complete replacement document.
+4. Send `kb_upsert` with the retained `expected_revision` and a unique
+   idempotency key. Invalid documents are rejected; they are not saved.
 5. Retain the returned receipt.
 
 ## Receipt semantics
@@ -40,7 +41,7 @@ complete.
 
 ## Conflict
 
-A revision conflict means another accepted write happened after the read. Fetch the current page, perform a semantic three-way merge, validate, and retry. Never remove another actor's new information merely to make the retry succeed.
+A revision conflict means another accepted write happened after the read. Fetch the current page, perform a semantic three-way merge, and retry with a new idempotency key. Never remove another actor's new information merely to make the retry succeed.
 
 ## Failure
 

@@ -13,17 +13,15 @@ environment.
 
 | Tool | Behavior |
 |---|---|
-| `kb_overview` | Scope, self-describing taxonomy + usage, health, document count, Git head |
+| `kb_overview` | Scope, self-describing taxonomy + usage, health, bundle validation issues, document count, Git head |
 | `kb_search` | SQLite FTS5 content search (OR across tokens; BM25 rank) with type, status, tag, and inclusive `updated_at` (`since` / `until`) filters; hits include `updated_at` |
 | `kb_get` | Complete Markdown, parsed metadata, and SHA-256 revision |
-| `kb_upsert` | Create or replace with validation, idempotency, and concurrency checks |
+| `kb_upsert` | Create or replace with validation, idempotency, and concurrency checks; invalid documents are rejected |
 | `kb_put_file` | Store a non-text artifact under reserved `files/` (base64, max 10 MiB) |
 | `kb_get_file` | Artifact metadata and optional base64 bytes |
 | `kb_list_files` | Inventory of `files/` |
 | `kb_archive` | Move under `archive/` |
 | `kb_history` | Gateway audit receipts and backup Git history |
-| `kb_validate` | Proposed-document or whole-bundle validation |
-| `kb_backup_status` | Scheduled Git backup state and lag |
 
 Every mutation is serialized with an OS file lock and written atomically to the
 bundle. Git commits are not created on write. A background scheduler controlled

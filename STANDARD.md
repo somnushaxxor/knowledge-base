@@ -75,17 +75,15 @@ The gateway exposes a small MCP tool surface:
 
 | Tool | Purpose |
 |---|---|
-| `kb_overview` | Self-description: taxonomy (types, purpose, folders, sections), write/read usage, health, latest revision, artifact count |
+| `kb_overview` | Self-description: taxonomy (types, purpose, folders, sections), write/read usage, health, bundle validation issues, latest revision, artifact count |
 | `kb_search` | Search metadata and content; filter by type, status, tags, and inclusive `updated_at` bounds (`since` / `until`); each hit includes `updated_at` |
 | `kb_get` | Read one hydrated document and its revision |
-| `kb_upsert` | Create or replace one document using optimistic concurrency |
+| `kb_upsert` | Create or replace one document; invalid documents are rejected |
 | `kb_put_file` | Store a non-text artifact under reserved `files/` |
 | `kb_get_file` | Read one artifact's metadata and optional base64 bytes |
 | `kb_list_files` | List artifacts stored under `files/` |
 | `kb_archive` | Move a document to the archive without destroying history |
 | `kb_history` | Inspect revisions, provenance, and change history |
-| `kb_validate` | Validate a proposed document or the whole bundle |
-| `kb_backup_status` | Report GitHub recovery points and backup lag |
 
 The gateway is self-describing. MCP `instructions` tell agents to call
 `kb_overview` before the first write. That tool returns the deployment
@@ -104,9 +102,10 @@ requires:
 All authenticated calls use the fixed audit actor `single-user`. This profile
 does not distinguish which of the owner's clients used the shared token.
 
-The gateway verifies the bearer token, performs validation, obtains a
-mutation lock, checks the expected revision, and writes atomically. Document
-writes also update the search projection. Live writes do not create Git commits. It then returns:
+The gateway verifies the bearer token, validates the complete document,
+obtains a mutation lock, checks the expected revision, and writes atomically.
+Invalid documents are rejected and not persisted. Document writes also update
+the search projection. Live writes do not create Git commits. It then returns:
 
 ```json
 {
@@ -241,8 +240,9 @@ This agent-kit repository must never receive live or backup knowledge payloads.
 - Each wake creates at most one local commit with message `backup <timestamp>`
   if the working tree is dirty, then best-effort pushes to the private remote.
 - The recovery-point objective equals the configured backup interval.
-- `kb_backup_status` exposes dirty state, last backup commit, last pushed
-  commit, lag, failure reason, and the configured interval.
+- Write receipts report `backup: pending` or `backup: synced`. Recovery points
+  live in the separate Git backup repository and scheduler logs, not on the
+  consumer MCP surface.
 - Backup lag above the objective triggers an alert but does not split the live
   authority.
 - Force-pushes and destructive history rewrites are prohibited.
@@ -325,6 +325,7 @@ The single-user system is acceptable when:
 3. a request with a missing or incorrect token cannot access any MCP tool;
 4. revision history attributes every accepted mutation to `single-user`;
 5. an unavailable GitHub does not create a second authority;
-6. backup lag and the last recovery point are observable;
+6. write receipts report backup pending vs synced; recovery points exist in
+   the separate Git backup;
 7. a clean machine can restore the bundle from the separate Git backup and pass validation;
 8. Codex, Claude Code, and Cursor load the same maintenance skill.

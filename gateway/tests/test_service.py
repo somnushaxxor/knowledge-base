@@ -202,15 +202,22 @@ def test_archive_preserves_receipt_and_history(
     assert [item["operation"] for item in history["audit"]] == ["archive", "upsert"]
 
 
-def test_relative_internal_links_fail_validation(
+def test_upsert_rejects_relative_internal_links(
     service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:
     invalid = note.replace("/notes/another.md", "notes/another.md")
-    result = service.validate_proposed(
-        actor, "notes/fastmcp-gateway.md", invalid
-    )
-    assert result["valid"] is False
-    assert any("bundle-absolute" in issue["message"] for issue in result["issues"])
+    with pytest.raises(ValidationError, match="document does not satisfy") as caught:
+        service.upsert(
+            actor,
+            path="notes/fastmcp-gateway.md",
+            content=invalid,
+            idempotency_key="create-invalid",
+            reason="Should not persist",
+            create_only=True,
+        )
+
+    assert any("bundle-absolute" in issue["message"] for issue in caught.value.issues)
+    assert not (service.settings.bundle_path / "notes" / "fastmcp-gateway.md").exists()
 
 
 def test_overview_is_self_describing(
@@ -231,6 +238,29 @@ def test_overview_is_self_describing(
     assert overview["usage"]["document"]["required_metadata"][0] == "type"
     assert any("expected_revision" in step for step in overview["usage"]["write"])
     assert "write the live bundle or Git backup directly" in overview["usage"]["never"]
+    assert overview["health"] == "ok"
+    assert overview["validation_issue_count"] == 0
+    assert overview["validation_issues"] == []
+    assert any("invalid documents are rejected" in step for step in overview["usage"]["write"])
+
+
+def test_overview_reports_existing_bundle_issues(
+    service: KnowledgeGateway, actor: Actor
+) -> None:
+    broken = service.settings.bundle_path / "notes" / "broken.md"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.write_text(
+        "---\ntitle: Broken\n---\n\n# Broken\n",
+        encoding="utf-8",
+    )
+
+    overview = service.overview(actor)
+
+    assert overview["health"] == "degraded"
+    assert overview["validation_issue_count"] >= 1
+    assert any(
+        issue["path"] == "notes/broken.md" for issue in overview["validation_issues"]
+    )
 
 
 def test_taxonomy_sections_are_guidance(
@@ -240,11 +270,16 @@ def test_taxonomy_sections_are_guidance(
         "## Relationships", "## Links"
     )
 
-    result = service.validate_proposed(
-        actor, "notes/fastmcp-gateway.md", content
+    receipt = service.upsert(
+        actor,
+        path="notes/fastmcp-gateway.md",
+        content=content,
+        idempotency_key="create-sections",
+        reason="Sections are guidance",
+        create_only=True,
     )
 
-    assert result == {"valid": True, "issue_count": 0, "issues": []}
+    assert receipt["path"] == "notes/fastmcp-gateway.md"
 
 
 def test_taxonomy_supports_wildcard_index_without_tags(tmp_path) -> None:

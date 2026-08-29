@@ -94,6 +94,7 @@ class KnowledgeGateway:
             "latest_commit": self.git.head(),
             "health": "ok" if validation["valid"] else "degraded",
             "validation_issue_count": validation["issue_count"],
+            "validation_issues": validation["issues"],
         }
 
     def search(
@@ -461,15 +462,6 @@ class KnowledgeGateway:
             "git": self.git.history(normalized, limit),
         }
 
-    def validate_proposed(
-        self, actor: Actor, path: str, content: str
-    ) -> dict[str, object]:
-        try:
-            validate_document(path, content, self.taxonomy)
-        except ValidationError as exc:
-            return {"valid": False, "issue_count": len(exc.issues), "issues": exc.issues}
-        return {"valid": True, "issue_count": 0, "issues": []}
-
     def validate_bundle(self, actor: Actor) -> dict[str, object]:
         self.ensure_ready()
         issues: list[dict[str, str]] = []
@@ -491,13 +483,6 @@ class KnowledgeGateway:
                 else:
                     issues.append({"path": relative, "message": str(exc)})
         return {"valid": not issues, "issue_count": len(issues), "issues": issues}
-
-    def backup_status(self, actor: Actor) -> dict[str, object]:
-        self.ensure_ready()
-        return {
-            "backup_interval_hours": self.settings.backup_interval_hours,
-            "git": self.git.backup_status(),
-        }
 
     def run_backup(self) -> dict[str, object]:
         """Commit dirty bundle files and best-effort push to the private remote."""

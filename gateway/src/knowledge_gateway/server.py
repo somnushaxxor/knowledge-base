@@ -67,7 +67,8 @@ def create_mcp(
     @mcp.tool
     async def kb_overview() -> dict[str, object]:
         """Read how this knowledge base works: taxonomy (types, purpose, folders,
-        sections), write/read usage, health, and latest durable revision.
+        sections), write/read usage, health, validation issues, and latest
+        durable revision.
 
         Call this before the first write in a session and follow `usage` plus
         `taxonomy`. Do not copy a parallel write protocol from a skill.
@@ -116,7 +117,11 @@ def create_mcp(
         expected_revision: str | None = None,
         create_only: bool = False,
     ) -> dict[str, object]:
-        """Create or replace one complete OKF document with optimistic concurrency."""
+        """Create or replace one complete OKF document with optimistic concurrency.
+
+        The gateway validates the document before writing. Invalid documents
+        are rejected and not persisted.
+        """
         return await _call(
             service.upsert,
             actor_from_request(settings),
@@ -201,24 +206,6 @@ def create_mcp(
             path,
             limit,
         )
-
-    @mcp.tool
-    async def kb_validate(
-        path: str | None = None,
-        content: str | None = None,
-    ) -> dict[str, object]:
-        """Validate one proposed document, or the whole mounted bundle."""
-        actor = actor_from_request(settings)
-        if (path is None) != (content is None):
-            raise ToolError("path and content must be provided together")
-        if path is not None and content is not None:
-            return await _call(service.validate_proposed, actor, path, content)
-        return await _call(service.validate_bundle, actor)
-
-    @mcp.tool
-    async def kb_backup_status() -> dict[str, object]:
-        """Report local Git and remote Git backup recovery points."""
-        return await _call(service.backup_status, actor_from_request(settings))
 
     return mcp
 

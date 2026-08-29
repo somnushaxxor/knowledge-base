@@ -23,8 +23,6 @@ async def test_mcp_exposes_the_normative_tool_contract(settings: Settings) -> No
         "kb_list_files",
         "kb_archive",
         "kb_history",
-        "kb_validate",
-        "kb_backup_status",
     }
     overview = next(tool for tool in tools if tool.name == "kb_overview")
     assert "taxonomy" in (overview.description or "").lower()

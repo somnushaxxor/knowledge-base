@@ -26,7 +26,7 @@ GATEWAY_USAGE: dict[str, object] = {
         "Use only types from this overview's taxonomy; never invent a type",
         "Write a coherent durable page, not a chat transcript",
         "Updates: kb_get, keep revision, replace the whole document",
-        "kb_validate, then kb_upsert with a unique idempotency_key",
+        "kb_upsert with a unique idempotency_key; invalid documents are rejected",
         "Creates: create_only=true. Updates: expected_revision from kb_get",
         "Never reuse an idempotency_key for a different request",
         "On conflict: kb_get current, semantic merge, new key — never last-write-wins",

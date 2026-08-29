@@ -1,6 +1,6 @@
 ---
 name: maintain-llm-wiki
-description: Maintain, search, ingest, and curate the shared cloud-first LLM Wiki through its Knowledge Gateway. Use when an agent must remember durable information, search shared memory, turn sources or conversations into wiki pages, update or reorganize existing knowledge, or inspect backup status.
+description: Maintain, search, ingest, and curate the shared cloud-first LLM Wiki through its Knowledge Gateway. Use when an agent must remember durable information, search shared memory, turn sources or conversations into wiki pages, or update or reorganize existing knowledge.
 ---
 
 # Maintain LLM Wiki
