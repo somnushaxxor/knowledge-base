@@ -14,18 +14,64 @@ from .models import ParsedDocument, TaxonomyType
 REQUIRED_METADATA = ("type", "title", "description", "status", "tags", "generated")
 FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
+# Returned by kb_overview so agents can write without a copied skill protocol.
+GATEWAY_USAGE: dict[str, object] = {
+    "read": [
+        "kb_search, then kb_get promising hits; do not answer from snippets alone",
+        "Follow bundle-absolute links that change the answer",
+        "Distinguish stored facts from inference",
+    ],
+    "write": [
+        "Search for an existing canonical page; prefer merge over create",
+        "Use only types from this overview's taxonomy; never invent a type",
+        "Write a coherent durable page, not a chat transcript",
+        "Updates: kb_get, keep revision, replace the whole document",
+        "kb_validate, then kb_upsert with a unique idempotency_key",
+        "Creates: create_only=true. Updates: expected_revision from kb_get",
+        "Never reuse an idempotency_key for a different request",
+        "On conflict: kb_get current, semantic merge, new key — never last-write-wins",
+        "Report success only after a write receipt; backup pending means live-ok, Git lag",
+    ],
+    "document": {
+        "format": "UTF-8 Markdown with YAML frontmatter",
+        "required_metadata": list(REQUIRED_METADATA),
+        "recommended_status": ["draft", "stable", "deprecated"],
+        "generated": "boolean, or {by, at} with non-empty strings",
+        "links": "internal links must be bundle-absolute and start with /",
+        "index": "index.md for navigation",
+        "log": "log.md for notable structural changes, newest first",
+        "files": "non-text artifacts via kb_put_file under files/; not full-text searchable",
+        "sections": "taxonomy.sections are recommended H2 headings, not hard-rejected",
+    },
+    "never": [
+        "write the live bundle or Git backup directly",
+        "claim a save without a gateway receipt",
+        "store secrets or unredacted credentials",
+        "send a scope other than the configured scope",
+        "use last-write-wins",
+    ],
+}
 
-def load_taxonomy(path: Path) -> dict[str, TaxonomyType]:
+
+def _read_taxonomy_yaml(path: Path) -> dict[str, object]:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise ConfigurationError(f"taxonomy file does not exist: {path}") from exc
     except yaml.YAMLError as exc:
         raise ConfigurationError(f"taxonomy is not valid YAML: {exc}") from exc
-
     if not isinstance(raw, dict) or not isinstance(raw.get("types"), list):
         raise ConfigurationError("taxonomy must contain a types list")
+    return raw
 
+
+def load_taxonomy_bundle(
+    path: Path,
+) -> tuple[dict[str, TaxonomyType], dict[str, object]]:
+    raw = _read_taxonomy_yaml(path)
+    policy = raw.get("policy")
+    if not isinstance(policy, dict):
+        policy = {}
     result: dict[str, TaxonomyType] = {}
     for item in raw["types"]:
         if not isinstance(item, dict):
@@ -41,17 +87,28 @@ def load_taxonomy(path: Path) -> dict[str, TaxonomyType]:
             tags_required = item.get("tags_required", True)
             if not isinstance(tags_required, bool):
                 raise ConfigurationError("taxonomy tags_required must be a boolean")
+            purpose = item.get("purpose", "")
+            if purpose is None:
+                purpose = ""
+            if not isinstance(purpose, str):
+                raise ConfigurationError("taxonomy purpose must be a string")
             entry = TaxonomyType(
                 name=str(item["type"]),
                 folder=str(item["folder"]).strip("/"),
                 sections=tuple(str(section) for section in item.get("sections", [])),
                 filename=filename,
                 tags_required=tags_required,
+                purpose=purpose,
             )
         except KeyError as exc:
             raise ConfigurationError(f"taxonomy type lacks {exc.args[0]}") from exc
         result[entry.name] = entry
-    return result
+    return result, policy
+
+
+def load_taxonomy(path: Path) -> dict[str, TaxonomyType]:
+    types, _policy = load_taxonomy_bundle(path)
+    return types
 
 
 def normalize_document_path(value: str) -> str:

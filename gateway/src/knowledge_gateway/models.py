@@ -19,6 +19,7 @@ class TaxonomyType:
     sections: tuple[str, ...]
     filename: str | None = None
     tags_required: bool = True
+    purpose: str = ""
 
 
 @dataclass(frozen=True)

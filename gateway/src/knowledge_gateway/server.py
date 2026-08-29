@@ -54,16 +54,24 @@ def create_mcp(
     mcp = FastMCP(
         name="Knowledge Gateway",
         instructions=(
-            "Canonical OKF knowledge-base gateway. Search before mutation, use "
-            "expected_revision for updates, and never reuse an idempotency key "
-            "for a different request."
+            "Canonical OKF knowledge-base gateway. Before the first write in a "
+            "session, call kb_overview and follow its usage and taxonomy. "
+            "Search before mutation. Updates require expected_revision. Never "
+            "reuse an idempotency key for a different request. Never write the "
+            "live bundle or Git backup directly. Never invent document types. "
+            "Report success only after a write receipt."
         ),
         auth=build_auth(settings),
     )
 
     @mcp.tool
     async def kb_overview(scope: str) -> dict[str, object]:
-        """Read bundle identity, taxonomy, health, and latest durable revision."""
+        """Read how this knowledge base works: taxonomy (types, purpose, folders,
+        sections), write/read usage, health, and latest durable revision.
+
+        Call this before the first write in a session and follow `usage` plus
+        `taxonomy`. Do not copy a parallel write protocol from a skill.
+        """
         return await _call(service.overview, actor_from_request(settings), scope)
 
     @mcp.tool

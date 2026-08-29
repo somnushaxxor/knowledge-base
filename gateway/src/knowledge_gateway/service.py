@@ -32,8 +32,9 @@ from .git_backend import GitBackend
 from .index import GatewayIndex
 from .models import Actor, ParsedDocument
 from .okf import (
+    GATEWAY_USAGE,
     find_markdown_files,
-    load_taxonomy,
+    load_taxonomy_bundle,
     normalize_document_path,
     parse_document,
     validate_document,
@@ -46,7 +47,9 @@ class KnowledgeGateway:
     def __init__(self, settings: Settings):
         settings.validate()
         self.settings = settings
-        self.taxonomy = load_taxonomy(settings.taxonomy_path)
+        self.taxonomy, self.taxonomy_policy = load_taxonomy_bundle(
+            settings.taxonomy_path
+        )
         self.index = GatewayIndex(settings.state_path / "gateway.sqlite3")
         self.git = GitBackend(
             settings.bundle_path,
@@ -82,10 +85,13 @@ class KnowledgeGateway:
                     "folder": entry.folder,
                     "filename": entry.filename,
                     "tags_required": entry.tags_required,
+                    "purpose": entry.purpose,
                     "sections": list(entry.sections),
                 }
                 for name, entry in self.taxonomy.items()
             },
+            "taxonomy_policy": self.taxonomy_policy,
+            "usage": GATEWAY_USAGE,
             "document_count": self.index.document_count(),
             "file_count": len(find_artifact_files(self.settings.bundle_path)),
             "latest_commit": self.git.head(),

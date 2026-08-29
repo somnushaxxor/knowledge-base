@@ -1,5 +1,8 @@
 # OKF Profile
 
+Canonical live copy for agents: `kb_overview` (`usage` + `taxonomy`).
+This file is a human-readable duplicate.
+
 The canonical bundle follows Open Knowledge Format v0.2 with additional local constraints.
 
 ## Bundle

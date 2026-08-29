@@ -30,7 +30,7 @@ outside this version of the standard.
 | Lexical search | SQLite FTS5 or QMD-compatible local index | Fast full-text retrieval over the live OKF bundle |
 | Semantic search | Optional derived vector index | Improve recall; always rebuildable from OKF |
 | Backup | Local Git history pushed to a separate private Git repository | Off-site, reviewable, versioned recovery copy without mixing knowledge content into the agent kit |
-| Agent behavior | Canonical skill, rules, and hooks in this repository | Make all agents follow the same workflow |
+| Agent behavior | MCP `instructions` + `kb_overview` usage/taxonomy; skill is a trigger | Make all agents follow the same workflow without copying the write protocol |
 
 The gateway is custom because no sufficiently established project currently combines strict OKF storage, remote MCP, optimistic concurrency, and explicit backup semantics. It should be small and boring: use mature libraries, keep OKF as the source of truth, and avoid inventing a database-specific knowledge format.
 
@@ -76,7 +76,7 @@ The gateway exposes a small MCP tool surface:
 
 | Tool | Purpose |
 |---|---|
-| `kb_overview` | Read bundle identity, taxonomy, health, latest revision, and artifact count |
+| `kb_overview` | Self-description: taxonomy (types, purpose, folders, sections), write/read usage, health, latest revision, artifact count |
 | `kb_search` | Search metadata and content; filter by type, status, tags, and inclusive `updated_at` bounds (`since` / `until`); each hit includes `updated_at` |
 | `kb_get` | Read one hydrated document and its revision |
 | `kb_upsert` | Create or replace one document using optimistic concurrency |
@@ -87,6 +87,12 @@ The gateway exposes a small MCP tool surface:
 | `kb_history` | Inspect revisions, provenance, and change history |
 | `kb_validate` | Validate a proposed document or the whole bundle |
 | `kb_backup_status` | Report GitHub recovery points and backup lag |
+
+The gateway is self-describing. MCP `instructions` tell agents to call
+`kb_overview` before the first write. That tool returns the deployment
+taxonomy (including each type's `purpose` and recommended `sections`),
+taxonomy policy, and the write/read `usage` contract. Agents must follow
+that payload rather than copying a parallel protocol into a skill.
 
 Every MCP request requires the configured bearer token. Every mutation also
 requires:
@@ -208,9 +214,10 @@ The wiki is curated, not merely accumulated:
 7. Treat semantic and vector indexes as disposable projections, never as the only copy.
 
 No permanently running “wiki-building agent” is required. Any of the owner's
-configured agents can maintain the wiki by loading the same skill and calling
-the gateway with the shared bearer token. Scheduled maintenance agents are
-optional and use the same contract.
+configured agents can maintain the wiki by calling the gateway with the shared
+bearer token. `kb_overview` is the live write/read contract. The distributed
+skill is a trigger that loads that contract; it must not duplicate it.
+Scheduled maintenance agents are optional and use the same MCP surface.
 
 Maintenance may be concurrent across the owner's clients:
 
@@ -253,7 +260,8 @@ This repository is the canonical distribution source:
 
 - `gateway/` contains the buildable FastMCP reference implementation and its
   tests; it never contains runtime data.
-- `skills/maintain-llm-wiki/` contains the cross-agent workflow.
+- `skills/maintain-llm-wiki/` contains the cross-agent **trigger** (call
+  `kb_overview`, then follow the gateway).
 - `rules/knowledge-base.md` contains the invariant policy.
 - `hooks/` contains deterministic repository checks.
 - `templates/runtime/` contains the active vendor adapters installed into a

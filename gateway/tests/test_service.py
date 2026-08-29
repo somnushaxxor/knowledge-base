@@ -225,6 +225,26 @@ def test_validation_and_scope_boundary(
         service.overview(actor, "another-scope")
 
 
+def test_overview_is_self_describing(
+    service: KnowledgeGateway, actor: Actor
+) -> None:
+    overview = service.overview(actor, "test")
+
+    assert overview["taxonomy"]["Note"]["purpose"] == (
+        "Exercise gateway validation in automated tests."
+    )
+    assert overview["taxonomy"]["Note"]["folder"] == "notes"
+    assert overview["taxonomy"]["Note"]["sections"] == [
+        "Summary",
+        "Details",
+        "Relationships",
+    ]
+    assert overview["taxonomy_policy"]["unknown_types"] == "reject"
+    assert overview["usage"]["document"]["required_metadata"][0] == "type"
+    assert any("expected_revision" in step for step in overview["usage"]["write"])
+    assert "write the live bundle or Git backup directly" in overview["usage"]["never"]
+
+
 def test_taxonomy_sections_are_guidance(
     service: KnowledgeGateway, actor: Actor, note: str
 ) -> None:

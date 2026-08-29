@@ -1,5 +1,8 @@
 # Knowledge Gateway Write Protocol
 
+Canonical live copy for agents: `kb_overview.usage`. This file is a
+human-readable duplicate.
+
 ## Required tool behavior
 
 Use the gateway tools described in `STANDARD.md`: `kb_search`, `kb_get`, `kb_validate`, `kb_upsert`, `kb_put_file`, `kb_get_file`, `kb_list_files`, `kb_archive`, `kb_history`, and `kb_backup_status`.

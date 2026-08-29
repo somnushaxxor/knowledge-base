@@ -19,7 +19,7 @@ into a connected target project.
 
 - [STANDARD.md](STANDARD.md) — the normative architecture and operating rules.
 - [gateway/README.md](gateway/README.md) — build, test, configure, and run the FastMCP gateway.
-- [skills/maintain-llm-wiki/SKILL.md](skills/maintain-llm-wiki/SKILL.md) — the reusable cross-agent maintenance skill.
+- [skills/maintain-llm-wiki/SKILL.md](skills/maintain-llm-wiki/SKILL.md) — trigger skill; protocol lives on `kb_overview`.
 - [rules/knowledge-base.md](rules/knowledge-base.md) — the concise agent contract.
 
 ## Activate the kit in a connected project

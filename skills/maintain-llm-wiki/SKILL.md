@@ -1,107 +1,17 @@
 ---
 name: maintain-llm-wiki
-description: Maintain, search, ingest, and curate the shared cloud-first LLM Wiki through its Knowledge Gateway using the Open Knowledge Format profile. Use when an agent must remember durable information, search shared memory, turn sources or conversations into wiki pages, update or reorganize existing knowledge, resolve concurrent edits, validate OKF documents, or inspect backup status.
+description: Maintain, search, ingest, and curate the shared cloud-first LLM Wiki through its Knowledge Gateway. Use when an agent must remember durable information, search shared memory, turn sources or conversations into wiki pages, update or reorganize existing knowledge, or inspect backup status.
 ---
 
 # Maintain LLM Wiki
 
-## Overview
+This skill is a **trigger**. The Knowledge Gateway MCP is self-describing.
 
-Use one single-user cloud Knowledge Gateway as the live authority for its
-configured knowledge-base scope and OKF Markdown as the canonical
-representation. Every configured client uses the same bearer token and has
-access to the complete MCP tool surface. Apply the same search-before-write,
-provenance, concurrency, authentication, and backup rules in every agent.
+1. Call `kb_overview` with the configured scope.
+2. Follow `usage` and `taxonomy` from that result for every read and write.
+3. Do not invent document types. Do not write the live bundle or Git backup.
+4. Report success only after a gateway write receipt.
 
-## Non-negotiable rules
+If the gateway is unavailable: say so, keep the draft in-chat, do not create another authority.
 
-- Keep the live bundle and its separate private Git backup outside the
-  agent-kit repository; never use either Git repository as the live
-  synchronization layer.
-- Never write the live bundle directly when the gateway is configured.
-- Never claim information was saved without a durable gateway receipt.
-- Never use a private vector store or chat memory as the only copy.
-- Preserve unknown OKF metadata and source attribution.
-- Never overwrite a concurrent change with last-write-wins.
-- Use only the gateway's configured scope.
-- Treat mutation provenance as belonging to the fixed `single-user` actor.
-- Keep secrets and unredacted credentials out of the knowledge base.
-
-## Choose the operation
-
-- For a question or recall request, follow **Read**.
-- For “remember this,” ingestion, or durable new knowledge, follow **Create or update**.
-- For a PDF, image, or other non-text artifact, follow **Store an artifact**, then link it from a knowledge page.
-- For restructuring, deduplication, or stale material, follow **Curate**.
-- For write conflicts, follow **Resolve a conflict**.
-- For recovery assurance, follow **Check backup**.
-
-Read [references/okf-profile.md](references/okf-profile.md) before creating or structurally changing a document. Read [references/write-protocol.md](references/write-protocol.md) before a mutation or conflict resolution.
-
-## Read
-
-1. Call `kb_search` with the user's terms and likely synonyms.
-2. For “recently / yesterday / since date” recall, pass inclusive ISO-8601
-   `since` / `until` on `updated_at`, or use an empty query to list newest
-   matching documents first. Prefer `updated_at` over `generated.at`.
-3. Hydrate promising hits with `kb_get`; do not answer from snippets alone.
-4. Follow internal links when they materially affect the answer.
-5. Distinguish stored knowledge from inference.
-6. Cite the relevant knowledge paths or original sources when useful.
-
-## Create or update
-
-1. Decide whether the information is durable, reusable, and safe to store. Do not persist transient chat or secrets.
-2. Search for an existing canonical page before creating one.
-3. Select a type from the gateway-configured deployment taxonomy. Do not infer
-   or invent a new type.
-4. Hydrate the target page and record its revision when updating.
-5. Merge new information into a coherent page rather than appending a session transcript.
-6. Include provenance and sources. When using
-   `assets/document-template.md`, replace its type and section placeholders
-   with values required by the deployment taxonomy.
-7. Call `kb_validate`.
-8. Call `kb_upsert` with an idempotency key and `expected_revision`, or an explicit create-only condition.
-9. Keep the returned path, revision, and backup state in the working context.
-10. Report success only after receiving the receipt. If backup is pending, distinguish “saved live” from “backed up.”
-
-## Store an artifact
-
-Use reserved `files/` for durable non-text data (PDF, images, other binaries).
-Do not put textual knowledge there.
-
-1. Confirm the object is a non-text artifact and is safe to store.
-2. Choose a stable bundle path under `files/`, for example `files/receipts/tax-2026.pdf`.
-3. Encode the raw bytes as standard base64 and call `kb_put_file` with an
-   idempotency key and `create_only=true`, or `expected_revision` when replacing.
-4. Keep the receipt. Then create or update a knowledge page that explains why
-   the artifact matters and links to it as `/files/...`.
-5. Recall later with `kb_list_files` or `kb_get_file`. Full-text search does
-   not index artifact bytes.
-
-## Curate
-
-1. Find duplicates, overloaded pages, broken relationships, stale claims, and orphaned captures.
-2. Read all affected pages before planning a mutation.
-3. Preserve useful history and sources.
-4. Prefer semantic merges, explicit redirects or archive actions, and repaired links.
-5. Apply small reviewable mutations with revision checks.
-6. Record significant structural changes in `log.md`.
-
-## Resolve a conflict
-
-1. Do not retry the old payload blindly.
-2. Fetch the current document and revision.
-3. Compare the current document, the intended change, and the previously read revision.
-4. Merge meaning, sources, and links; surface a genuine semantic contradiction to the user.
-5. Validate and retry with the new revision and a new idempotency key.
-
-## Check backup
-
-Call `kb_backup_status`. Report the configured backup interval, dirty state,
-last backup commit, last pushed commit, backup lag, and any push failure. Never
-infer backup health merely because a live write succeeded.
-
-## Gateway unavailable
-
-Do not silently create an alternative authority. Keep the proposed content in the current conversation, state that it is not persisted, and retry when the gateway is available. Use a local queue only if an explicitly configured queue preserves idempotency and visibly reports pending state.
+Human-readable copies of the same contract (optional): [okf-profile.md](references/okf-profile.md), [write-protocol.md](references/write-protocol.md).
